@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 """
 runtests.py [OPTIONS] [-- ARGS]
 
@@ -18,6 +18,10 @@ Run a debugger:
 
     $ gdb --args python runtests.py [...other args...]
 
+Disable pytest capturing of output by using its '-s' option:
+
+    $ python runtests.py -- -s
+
 Generate C code coverage listing under build/lcov/:
 (requires http://ltp.sourceforge.net/coverage/lcov.php)
 
@@ -25,8 +29,6 @@ Generate C code coverage listing under build/lcov/:
     $ python runtests.py --lcov-html
 
 """
-from __future__ import division, print_function
-
 #
 # This is a generic test runner script for projects using NumPy's test
 # framework. Change the following values to adapt to your project:
@@ -67,6 +69,10 @@ def main(argv):
     parser = ArgumentParser(usage=__doc__.lstrip())
     parser.add_argument("--verbose", "-v", action="count", default=1,
                         help="more verbosity")
+    parser.add_argument("--debug-info", action="store_true",
+                        help=("add --verbose-cfg to build_src to show compiler "
+                              "configuration output while creating "
+                              "_numpyconfig.h and config.h"))
     parser.add_argument("--no-build", "-n", action="store_true", default=False,
                         help="do not build the project (use system installed version)")
     parser.add_argument("--build-only", "-b", action="store_true", default=False,
@@ -106,6 +112,8 @@ def main(argv):
                         help="Debug build")
     parser.add_argument("--parallel", "-j", type=int, default=0,
                         help="Number of parallel jobs during build")
+    parser.add_argument("--warn-error", action="store_true",
+                        help="Set -Werror to convert all compiler warnings to errors")
     parser.add_argument("--show-build-log", action="store_true",
                         help="Show build output rather than using a log file")
     parser.add_argument("--bench", action="store_true",
@@ -173,7 +181,7 @@ def main(argv):
             sys.modules['__main__'] = types.ModuleType('__main__')
             ns = dict(__name__='__main__',
                       __file__=extra_argv[0])
-            exec_(script, ns)
+            exec(script, ns)
             sys.exit(0)
         else:
             import code
@@ -366,6 +374,10 @@ def build_project(args):
     cmd += ["build"]
     if args.parallel > 1:
         cmd += ["-j", str(args.parallel)]
+    if args.debug_info:
+        cmd += ["build_src", "--verbose-cfg"]
+    if args.warn_error:
+        cmd += ["--warn-error"]
     # Install; avoid producing eggs so numpy can be imported from dst_dir.
     cmd += ['install', '--prefix=' + dst_dir,
             '--single-version-externally-managed',
@@ -466,26 +478,6 @@ def lcov_generate():
     else:
         print("HTML output generated under build/lcov/")
 
-
-#
-# Python 3 support
-#
-
-if sys.version_info[0] >= 3:
-    import builtins
-    exec_ = getattr(builtins, "exec")
-else:
-    def exec_(code, globs=None, locs=None):
-        """Execute code in a namespace."""
-        if globs is None:
-            frame = sys._getframe(1)
-            globs = frame.f_globals
-            if locs is None:
-                locs = frame.f_locals
-            del frame
-        elif locs is None:
-            locs = globs
-        exec("""exec code in globs, locs""")
 
 if __name__ == "__main__":
     main(argv=sys.argv[1:])

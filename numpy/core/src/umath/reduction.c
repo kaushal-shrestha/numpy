@@ -36,7 +36,7 @@
  * If 'dtype' isn't NULL, this function steals its reference.
  */
 static PyArrayObject *
-allocate_reduce_result(PyArrayObject *arr, npy_bool *axis_flags,
+allocate_reduce_result(PyArrayObject *arr, const npy_bool *axis_flags,
                         PyArray_Descr *dtype, int subok)
 {
     npy_intp strides[NPY_MAXDIMS], stride;
@@ -54,7 +54,9 @@ allocate_reduce_result(PyArrayObject *arr, npy_bool *axis_flags,
 
     /* Build the new strides and shape */
     stride = dtype->elsize;
-    memcpy(shape, arr_shape, ndim * sizeof(shape[0]));
+    if (ndim) {
+        memcpy(shape, arr_shape, ndim * sizeof(shape[0]));
+    }
     for (idim = ndim-1; idim >= 0; --idim) {
         npy_intp i_perm = strideperm[idim].perm;
         if (axis_flags[i_perm]) {
@@ -82,10 +84,12 @@ allocate_reduce_result(PyArrayObject *arr, npy_bool *axis_flags,
  * The return value is a view into 'out'.
  */
 static PyArrayObject *
-conform_reduce_result(int ndim, npy_bool *axis_flags,
+conform_reduce_result(PyArrayObject *in, const npy_bool *axis_flags,
                       PyArrayObject *out, int keepdims, const char *funcname,
                       int need_copy)
 {
+    int ndim = PyArray_NDIM(in);
+    npy_intp *shape_in = PyArray_DIMS(in);
     npy_intp strides[NPY_MAXDIMS], shape[NPY_MAXDIMS];
     npy_intp *strides_out = PyArray_STRIDES(out);
     npy_intp *shape_out = PyArray_DIMS(out);
@@ -116,6 +120,16 @@ conform_reduce_result(int ndim, npy_bool *axis_flags,
                     return NULL;
                 }
             }
+            else {
+                if (shape_out[idim] != shape_in[idim]) {
+                    PyErr_Format(PyExc_ValueError,
+                            "output parameter for reduction operation %s "
+                            "has a non-reduction dimension not equal to "
+                            "the input one.", funcname);
+                    return NULL;
+                }
+            }
+
         }
 
         Py_INCREF(out);
@@ -134,6 +148,13 @@ conform_reduce_result(int ndim, npy_bool *axis_flags,
                 PyErr_Format(PyExc_ValueError,
                         "output parameter for reduction operation %s "
                         "does not have enough dimensions", funcname);
+                return NULL;
+            }
+            if (shape_out[idim_out] != shape_in[idim]) {
+                PyErr_Format(PyExc_ValueError,
+                        "output parameter for reduction operation %s "
+                        "has a non-reduction dimension not equal to "
+                        "the input one.", funcname);
                 return NULL;
             }
             strides[idim] = strides_out[idim_out];
@@ -238,7 +259,7 @@ PyArray_CreateReduceResult(PyArrayObject *operand, PyArrayObject *out,
 
         /* Steal the dtype reference */
         Py_XDECREF(dtype);
-        result = conform_reduce_result(PyArray_NDIM(operand), axis_flags,
+        result = conform_reduce_result(operand, axis_flags,
                                        out, keepdims, funcname, need_copy);
     }
 
@@ -249,7 +270,7 @@ PyArray_CreateReduceResult(PyArrayObject *operand, PyArrayObject *out,
  * Count the number of dimensions selected in 'axis_flags'
  */
 static int
-count_axes(int ndim, npy_bool *axis_flags)
+count_axes(int ndim, const npy_bool *axis_flags)
 {
     int idim;
     int naxes = 0;
@@ -297,7 +318,7 @@ count_axes(int ndim, npy_bool *axis_flags)
 NPY_NO_EXPORT PyArrayObject *
 PyArray_InitializeReduceResult(
                     PyArrayObject *result, PyArrayObject *operand,
-                    npy_bool *axis_flags,
+                    const npy_bool *axis_flags,
                     npy_intp *out_skip_first_count, const char *funcname)
 {
     npy_intp *strides, *shape, shape_orig[NPY_MAXDIMS];
@@ -325,7 +346,9 @@ PyArray_InitializeReduceResult(
      */
     shape = PyArray_SHAPE(op_view);
     nreduce_axes = 0;
-    memcpy(shape_orig, shape, ndim * sizeof(npy_intp));
+    if (ndim) {
+        memcpy(shape_orig, shape, ndim * sizeof(npy_intp));
+    }
     for (idim = 0; idim < ndim; ++idim) {
         if (axis_flags[idim]) {
             if (shape[idim] == 0) {
@@ -524,7 +547,9 @@ PyUFunc_ReduceWrapper(PyArrayObject *operand, PyArrayObject *out,
                   NPY_ITER_ALIGNED;
     if (wheremask != NULL) {
         op[2] = wheremask;
-        op_dtypes[2] = PyArray_DescrFromType(NPY_BOOL);
+        /* wheremask is guaranteed to be NPY_BOOL, so borrow its reference */
+        op_dtypes[2] = PyArray_DESCR(wheremask);
+        assert(op_dtypes[2]->type_num == NPY_BOOL);
         if (op_dtypes[2] == NULL) {
             goto fail;
         }

@@ -1,5 +1,3 @@
-from __future__ import absolute_import, division, print_function
-
 from .common import Benchmark
 
 import numpy as np
@@ -10,6 +8,7 @@ class Core(Benchmark):
         self.l100 = range(100)
         self.l50 = range(50)
         self.l = [np.arange(1000), np.arange(1000)]
+        self.l_view = [memoryview(a) for a in self.l]
         self.l10x10 = np.ones((10, 10))
 
     def time_array_1(self):
@@ -26,6 +25,9 @@ class Core(Benchmark):
 
     def time_array_l(self):
         np.array(self.l)
+
+    def time_array_l_view(self):
+        np.array(self.l_view)
 
     def time_vstack_l(self):
         np.vstack(self.l)
@@ -162,13 +164,30 @@ class UnpackBits(Benchmark):
     def time_unpackbits(self):
         np.unpackbits(self.d)
 
+    def time_unpackbits_little(self):
+        np.unpackbits(self.d, bitorder="little")
+
     def time_unpackbits_axis0(self):
         np.unpackbits(self.d2, axis=0)
 
     def time_unpackbits_axis1(self):
         np.unpackbits(self.d2, axis=1)
 
+    def time_unpackbits_axis1_little(self):
+        np.unpackbits(self.d2, bitorder="little", axis=1)
+
 
 class Indices(Benchmark):
     def time_indices(self):
         np.indices((1000, 500))
+
+class VarComplex(Benchmark):
+    params = [10**n for n in range(1, 9)]
+    def setup(self, n):
+        self.arr = np.random.randn(n) + 1j * np.random.randn(n)
+
+    def teardown(self, n):
+        del self.arr
+
+    def time_var(self, n):
+        self.arr.var()

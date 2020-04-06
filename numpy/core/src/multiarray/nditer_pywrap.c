@@ -17,6 +17,7 @@
 #include "npy_pycompat.h"
 #include "alloc.h"
 #include "common.h"
+#include "conversion_utils.h"
 #include "ctors.h"
 
 /* Functions not part of the public NumPy C API */
@@ -82,7 +83,8 @@ static int npyiter_cache_values(NewNpyArrayIterObject *self)
 }
 
 static PyObject *
-npyiter_new(PyTypeObject *subtype, PyObject *args, PyObject *kwds)
+npyiter_new(PyTypeObject *subtype, PyObject *NPY_UNUSED(args),
+            PyObject *NPY_UNUSED(kwds))
 {
     NewNpyArrayIterObject *self;
 
@@ -535,7 +537,7 @@ try_single_dtype:
 }
 
 static int
-npyiter_convert_op_axes(PyObject *op_axes_in, npy_intp nop,
+npyiter_convert_op_axes(PyObject *op_axes_in, int nop,
                         int **op_axes, int *oa_ndim)
 {
     PyObject *a;
@@ -572,6 +574,7 @@ npyiter_convert_op_axes(PyObject *op_axes_in, npy_intp nop,
                 if (*oa_ndim > NPY_MAXDIMS) {
                     PyErr_SetString(PyExc_ValueError,
                             "Too many dimensions in op_axes");
+                    Py_DECREF(a);
                     return 0;
                 }
             }
@@ -602,8 +605,8 @@ npyiter_convert_op_axes(PyObject *op_axes_in, npy_intp nop,
                 }
                 Py_DECREF(v);
             }
-            Py_DECREF(a);
         }
+        Py_DECREF(a);
     }
 
     if (*oa_ndim == -1) {
@@ -746,7 +749,7 @@ npyiter_init(NewNpyArrayIterObject *self, PyObject *args, PyObject *kwds)
     int oa_ndim = -1;
     int op_axes_arrays[NPY_MAXARGS][NPY_MAXDIMS];
     int *op_axes[NPY_MAXARGS];
-    PyArray_Dims itershape = {NULL, 0};
+    PyArray_Dims itershape = {NULL, -1};
     int buffersize = 0;
 
     if (self->iter != NULL) {
@@ -763,7 +766,7 @@ npyiter_init(NewNpyArrayIterObject *self, PyObject *args, PyObject *kwds)
                     npyiter_order_converter, &order,
                     PyArray_CastingConverter, &casting,
                     &op_axes_in,
-                    PyArray_IntpConverter, &itershape,
+                    PyArray_OptionalIntpConverter, &itershape,
                     &buffersize)) {
         npy_free_cache_dim_obj(itershape);
         return -1;
@@ -798,7 +801,7 @@ npyiter_init(NewNpyArrayIterObject *self, PyObject *args, PyObject *kwds)
         }
     }
 
-    if (itershape.len > 0) {
+    if (itershape.len != -1) {
         if (oa_ndim == -1) {
             oa_ndim = itershape.len;
             memset(op_axes, 0, sizeof(op_axes[0]) * nop);
@@ -809,10 +812,6 @@ npyiter_init(NewNpyArrayIterObject *self, PyObject *args, PyObject *kwds)
                         "of entries equal to the iterator ndim");
             goto fail;
         }
-    }
-    else if (itershape.ptr != NULL) {
-        npy_free_cache_dim_obj(itershape);
-        itershape.ptr = NULL;
     }
 
     self->iter = NpyIter_AdvancedNew(nop, op, flags, order, casting, op_flags,
@@ -2014,7 +2013,7 @@ npyiter_seq_item(NewNpyArrayIterObject *self, Py_ssize_t i)
 
     if (i < 0 || i >= nop) {
         PyErr_Format(PyExc_IndexError,
-                "Iterator operand index %d is out of bounds", (int)i_orig);
+                "Iterator operand index %zd is out of bounds", i_orig);
         return NULL;
     }
 
@@ -2028,7 +2027,7 @@ npyiter_seq_item(NewNpyArrayIterObject *self, Py_ssize_t i)
      */
     if (!self->readflags[i]) {
         PyErr_Format(PyExc_RuntimeError,
-                "Iterator operand %d is write-only", (int)i);
+                "Iterator operand %zd is write-only", i);
         return NULL;
     }
 #endif
@@ -2145,12 +2144,12 @@ npyiter_seq_ass_item(NewNpyArrayIterObject *self, Py_ssize_t i, PyObject *v)
 
     if (i < 0 || i >= nop) {
         PyErr_Format(PyExc_IndexError,
-                "Iterator operand index %d is out of bounds", (int)i_orig);
+                "Iterator operand index %zd is out of bounds", i_orig);
         return -1;
     }
     if (!self->writeflags[i]) {
         PyErr_Format(PyExc_RuntimeError,
-                "Iterator operand %d is not writeable", (int)i_orig);
+                "Iterator operand %zd is not writeable", i_orig);
         return -1;
     }
 
@@ -2364,7 +2363,7 @@ npyiter_close(NewNpyArrayIterObject *self)
 }
 
 static PyObject *
-npyiter_exit(NewNpyArrayIterObject *self, PyObject *args)
+npyiter_exit(NewNpyArrayIterObject *self, PyObject *NPY_UNUSED(args))
 {
     /* even if called via exception handling, writeback any data */
     return npyiter_close(self);
@@ -2488,61 +2487,17 @@ NPY_NO_EXPORT PyMappingMethods npyiter_as_mapping = {
 };
 
 NPY_NO_EXPORT PyTypeObject NpyIter_Type = {
-#if defined(NPY_PY3K)
     PyVarObject_HEAD_INIT(NULL, 0)
-#else
-    PyObject_HEAD_INIT(NULL)
-    0,                                          /* ob_size */
-#endif
-    "numpy.nditer",                             /* tp_name */
-    sizeof(NewNpyArrayIterObject),              /* tp_basicsize */
-    0,                                          /* tp_itemsize */
-    /* methods */
-    (destructor)npyiter_dealloc,                /* tp_dealloc */
-    0,                                          /* tp_print */
-    0,                                          /* tp_getattr */
-    0,                                          /* tp_setattr */
-#if defined(NPY_PY3K)
-    0,                                          /* tp_reserved */
-#else
-    0,                                          /* tp_compare */
-#endif
-    0,                                          /* tp_repr */
-    0,                                          /* tp_as_number */
-    &npyiter_as_sequence,                       /* tp_as_sequence */
-    &npyiter_as_mapping,                        /* tp_as_mapping */
-    0,                                          /* tp_hash */
-    0,                                          /* tp_call */
-    0,                                          /* tp_str */
-    0,                                          /* tp_getattro */
-    0,                                          /* tp_setattro */
-    0,                                          /* tp_as_buffer */
-    Py_TPFLAGS_DEFAULT,                         /* tp_flags */
-    0,                                          /* tp_doc */
-    0,                                          /* tp_traverse */
-    0,                                          /* tp_clear */
-    0,                                          /* tp_richcompare */
-    0,                                          /* tp_weaklistoffset */
-    0,                                          /* tp_iter */
-    (iternextfunc)npyiter_next,                 /* tp_iternext */
-    npyiter_methods,                            /* tp_methods */
-    npyiter_members,                            /* tp_members */
-    npyiter_getsets,                            /* tp_getset */
-    0,                                          /* tp_base */
-    0,                                          /* tp_dict */
-    0,                                          /* tp_descr_get */
-    0,                                          /* tp_descr_set */
-    0,                                          /* tp_dictoffset */
-    (initproc)npyiter_init,                     /* tp_init */
-    0,                                          /* tp_alloc */
-    npyiter_new,                                /* tp_new */
-    0,                                          /* tp_free */
-    0,                                          /* tp_is_gc */
-    0,                                          /* tp_bases */
-    0,                                          /* tp_mro */
-    0,                                          /* tp_cache */
-    0,                                          /* tp_subclasses */
-    0,                                          /* tp_weaklist */
-    0,                                          /* tp_del */
-    0,                                          /* tp_version_tag */
+    .tp_name = "numpy.nditer",
+    .tp_basicsize = sizeof(NewNpyArrayIterObject),
+    .tp_dealloc = (destructor)npyiter_dealloc,
+    .tp_as_sequence = &npyiter_as_sequence,
+    .tp_as_mapping = &npyiter_as_mapping,
+    .tp_flags = Py_TPFLAGS_DEFAULT,
+    .tp_iternext = (iternextfunc)npyiter_next,
+    .tp_methods = npyiter_methods,
+    .tp_members = npyiter_members,
+    .tp_getset = npyiter_getsets,
+    .tp_init = (initproc)npyiter_init,
+    .tp_new = npyiter_new,
 };

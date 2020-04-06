@@ -1,5 +1,3 @@
-from __future__ import division, absolute_import, print_function
-
 import platform
 import pytest
 
@@ -18,7 +16,7 @@ def assert_raises_fpe(strmatch, callable, *args, **kwargs):
         assert_(False,
                 "Did not raise floating point %s error" % strmatch)
 
-class TestHalf(object):
+class TestHalf:
     def setup(self):
         # An array of all possible float16 values
         self.all_f16 = np.arange(0x10000, dtype=uint16)
@@ -104,7 +102,7 @@ class TestHalf(object):
         # logic will be necessary, an arbitrarily small offset should cause
         # normal up/down rounding always.
 
-        # Calculate the expecte pattern:
+        # Calculate the expected pattern:
         cmp_patterns = f16s_patterns[1:-1].copy()
 
         if shift == "down" and offset != "up":

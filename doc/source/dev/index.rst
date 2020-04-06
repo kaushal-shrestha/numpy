@@ -2,6 +2,32 @@
 Contributing to NumPy
 #####################
 
+Not a coder? Not a problem! NumPy is multi-faceted, and we can use a lot of help.
+These are all activities we'd like to get help with (they're all important, so
+we list them in alphabetical order):
+
+- Code maintenance and development
+- Community coordination
+- DevOps
+- Developing educational content & narrative documentation
+- Fundraising
+- Marketing
+- Project management
+- Translating content
+- Website design and development
+- Writing technical documentation
+
+The rest of this document discusses working on the NumPy code base and documentation.
+We're in the process of updating our descriptions of other activities and roles.
+If you are interested in these other activities, please contact us!
+You can do this via
+the `numpy-discussion mailing list <https://mail.python.org/mailman/listinfo/numpy-discussion>`__,
+or on `GitHub <https://github.com/numpy/numpy>`__ (open an issue or comment on a
+relevant issue). These are our preferred communication channels (open source is open
+by nature!), however if you prefer to discuss in private first, please reach out to
+our community coordinators at `numpy-team@googlegroups.com` or `numpy-team.slack.com`
+(send an email to `numpy-team@googlegroups.com` for an invite the first time).
+
 Development process - summary
 =============================
 
@@ -44,11 +70,11 @@ Here's the short summary, complete TOC links are below:
       git checkout -b linspace-speedups
 
    * Commit locally as you progress (``git add`` and ``git commit``)
-     Use a `properly formatted <writing-the-commit-message>` commit message,
+     Use a :ref:`properly formatted<writing-the-commit-message>` commit message,
      write tests that fail before your change and pass afterward, run all the
-     `tests locally <development-environment>`. Be sure to document any
+     :ref:`tests locally<development-environment>`. Be sure to document any
      changed behavior in docstrings, keeping to the NumPy docstring
-     `standard <howto-document>`.
+     :ref:`standard<howto-document>`.
 
 3. To submit your contribution:
 
@@ -57,8 +83,8 @@ Here's the short summary, complete TOC links are below:
       git push origin linspace-speedups
 
    * Enter your GitHub username and password (repeat contributors or advanced
-     users can remove this step by connecting to GitHub with `SSH <set-up-and-
-     configure-a-github-account>`.
+     users can remove this step by connecting to GitHub with
+     :ref:`SSH<set-up-and-configure-a-github-account>` .
 
    * Go to GitHub. The new branch will show up with a green Pull Request
      button. Make sure the title and message are clear, concise, and self-
@@ -92,8 +118,9 @@ Here's the short summary, complete TOC links are below:
      coding style of your branch. The CI tests must pass before your PR can be
      merged. If CI fails, you can find out why by clicking on the "failed"
      icon (red cross) and inspecting the build and test log. To avoid overuse
-     and waste of this resource, `test your work <recommended-development-
-     setup>` locally before committing.
+     and waste of this resource,
+     :ref:`test your work<recommended-development-setup>` locally before
+     committing.
 
    * A PR must be **approved** by at least one core team member before merging.
      Approval means the core team member has carefully reviewed the changes,
@@ -103,8 +130,11 @@ Here's the short summary, complete TOC links are below:
 
    Beyond changes to a functions docstring and possible description in the
    general documentation, if your change introduces any user-facing
-   modifications, update the current release notes under
-   ``doc/release/X.XX-notes.rst``
+   modifications they may need to be mentioned in the release notes.
+   To add your change to the release notes, you need to create a short file
+   with a summary and place it in ``doc/release/upcoming_changes``.
+   The file ``doc/release/upcoming_changes/README.rst`` details the format and
+   filename conventions.
 
    If your change introduces a deprecation, make sure to discuss this first on
    GitHub or the mailing list first. If agreement on the deprecation is
@@ -131,13 +161,14 @@ Divergence between ``upstream/master`` and your feature branch
 If GitHub indicates that the branch of your Pull Request can no longer
 be merged automatically, you have to incorporate changes that have been made
 since you started into your branch. Our recommended way to do this is to
-`rebase on master <rebasing-on-master>`.
+:ref:`rebase on master<rebasing-on-master>`.
 
 Guidelines
 ----------
 
 * All code should have tests (see `test coverage`_ below for more details).
-* All code should be `documented <docstring-standard>`.
+* All code should be `documented <https://numpydoc.readthedocs.io/
+  en/latest/format.html#docstring-standard>`_.
 * No changes are ever committed without review and approval by a core
   team member.Please ask politely on the PR or on the `mailing list`_ if you
   get no response to your pull request within a week.
@@ -156,15 +187,22 @@ Stylistic Guidelines
 
    import numpy as np
 
-* For C code, see the `numpy-c-style-guide`
+* For C code, see the :ref:`numpy-c-style-guide<style_guide>`
 
 
 Test coverage
 -------------
 
 Pull requests (PRs) that modify code should either have new tests, or modify existing
-tests to fail before the PR and pass afterwards. You should `run the tests
+tests to fail before the PR and pass afterwards. You should :ref:`run the tests
 <development-environment>` before pushing a PR.
+
+Running NumPy's test suite locally requires some additional packages, such as
+``pytest`` and ``hypothesis``. The additional testing dependencies are listed
+in ``test_requirements.txt`` in the top-level directory, and can conveniently
+be installed with::
+
+    pip install -r test_requirements.txt
 
 Tests for a module should ideally cover all code in that module,
 i.e., statement coverage should be at 100%.
@@ -175,7 +213,7 @@ and then run::
 
   $ python runtests.py --coverage
 
-This will create a report in `build/coverage`, which can be viewed with::
+This will create a report in ``build/coverage``, which can be viewed with::
 
   $ firefox build/coverage/index.html
 
@@ -197,7 +235,28 @@ Requirements
 ~~~~~~~~~~~~
 
 `Sphinx <http://www.sphinx-doc.org/en/stable/>`__ is needed to build
-the documentation. Matplotlib and SciPy are also required.
+the documentation. Matplotlib, SciPy, and IPython are also required.
+
+These additional dependencies for building the documentation are listed in
+``doc_requirements.txt`` and can be conveniently installed with::
+
+    pip install -r doc_requirements.txt
+
+The numpy documentation also depends on the
+`numpydoc <https://numpydoc.readthedocs.io/en/latest/>`__ sphinx extension
+as well as an external sphinx theme.
+These extensions are included as git submodules and must be initialized
+before building the docs.
+From the ``doc/`` directory:
+
+.. code:: sh
+
+    git submodule update --init
+
+The documentation includes mathematical formulae with LaTeX formatting.
+A working LaTeX document production system 
+(e.g. `texlive <https://www.tug.org/texlive/>`__) is required for the
+proper rendering of the LaTeX math in the documentation.
 
 Fixing Warnings
 ~~~~~~~~~~~~~~~
@@ -226,6 +285,7 @@ The rest of the story
    releasing
    governance/index
 
-NumPy-specific workflow is in `numpy-development-workflow`.
+NumPy-specific workflow is in :ref:`numpy-development-workflow
+<development-workflow>`.
 
 .. _`mailing list`: https://mail.python.org/mailman/listinfo/numpy-devel

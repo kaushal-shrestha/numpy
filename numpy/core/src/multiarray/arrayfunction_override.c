@@ -26,6 +26,7 @@ static PyObject *
 get_array_function(PyObject *obj)
 {
     static PyObject *ndarray_array_function = NULL;
+    PyObject *array_function;
 
     if (ndarray_array_function == NULL) {
         ndarray_array_function = get_ndarray_array_function();
@@ -37,7 +38,12 @@ get_array_function(PyObject *obj)
         return ndarray_array_function;
     }
 
-    return PyArray_LookupSpecial(obj, "__array_function__");
+    array_function = PyArray_LookupSpecial(obj, "__array_function__");
+    if (array_function == NULL && PyErr_Occurred()) {
+        PyErr_Clear(); /* TODO[gh-14801]: propagate crashes during attribute access? */
+    }
+
+    return array_function;
 }
 
 
@@ -173,7 +179,7 @@ array_function_method_impl(PyObject *func, PyObject *types, PyObject *args,
         }
     }
 
-    implementation = PyObject_GetAttr(func, npy_ma_str_wrapped);
+    implementation = PyObject_GetAttr(func, npy_ma_str_implementation);
     if (implementation == NULL) {
         return NULL;
     }

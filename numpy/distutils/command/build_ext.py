@@ -1,8 +1,6 @@
 """ Modified version of build_ext that handles fortran source files.
 
 """
-from __future__ import division, absolute_import, print_function
-
 import os
 import subprocess
 from glob import glob
@@ -15,11 +13,11 @@ from distutils.file_util import copy_file
 
 from numpy.distutils import log
 from numpy.distutils.exec_command import filepath_from_subprocess_output
-from numpy.distutils.system_info import combine_paths, system_info
-from numpy.distutils.misc_util import filter_sources, has_f_sources, \
-    has_cxx_sources, get_ext_source_files, \
-    get_numpy_include_dirs, is_sequence, get_build_architecture, \
-    msvc_version
+from numpy.distutils.system_info import combine_paths
+from numpy.distutils.misc_util import (
+    filter_sources, get_ext_source_files, get_numpy_include_dirs,
+    has_cxx_sources, has_f_sources, is_sequence
+)
 from numpy.distutils.command.config_compiler import show_fortran_compilers
 
 
@@ -33,6 +31,8 @@ class build_ext (old_build_ext):
          "specify the Fortran compiler type"),
         ('parallel=', 'j',
          "number of parallel jobs"),
+        ('warn-error', None,
+         "turn all warnings into errors (-Werror)"),
     ]
 
     help_options = old_build_ext.help_options + [
@@ -40,10 +40,13 @@ class build_ext (old_build_ext):
          show_fortran_compilers),
     ]
 
+    boolean_options = old_build_ext.boolean_options + ['warn-error']
+
     def initialize_options(self):
         old_build_ext.initialize_options(self)
         self.fcompiler = None
         self.parallel = None
+        self.warn_error = None
 
     def finalize_options(self):
         if self.parallel:
@@ -69,7 +72,10 @@ class build_ext (old_build_ext):
         self.include_dirs.extend(incl_dirs)
 
         old_build_ext.finalize_options(self)
-        self.set_undefined_options('build', ('parallel', 'parallel'))
+        self.set_undefined_options('build',
+                                        ('parallel', 'parallel'),
+                                        ('warn_error', 'warn_error'),
+                                  )
 
     def run(self):
         if not self.extensions:
@@ -116,6 +122,11 @@ class build_ext (old_build_ext):
                                      force=self.force)
         self.compiler.customize(self.distribution)
         self.compiler.customize_cmd(self)
+
+        if self.warn_error:
+            self.compiler.compiler.append('-Werror')
+            self.compiler.compiler_so.append('-Werror')
+
         self.compiler.show_customization()
 
         # Setup directory for storing generated extra DLL files on Windows

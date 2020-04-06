@@ -1,9 +1,9 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 """
 setup.py for installing F2PY
 
 Usage:
-   python setup.py install
+   pip install .
 
 Copyright 2001-2005 Pearu Peterson all rights reserved,
 Pearu Peterson <pearu@cens.ioc.ee>
@@ -16,8 +16,6 @@ $Date: 2005/01/30 17:22:14 $
 Pearu Peterson
 
 """
-from __future__ import division, print_function
-
 from numpy.distutils.core import setup
 from numpy.distutils.misc_util import Configuration
 

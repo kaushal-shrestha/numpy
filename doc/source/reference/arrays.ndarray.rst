@@ -9,7 +9,7 @@ The N-dimensional array (:class:`ndarray`)
 An :class:`ndarray` is a (usually fixed-size) multidimensional
 container of items of the same type and size. The number of dimensions
 and items in an array is defined by its :attr:`shape <ndarray.shape>`,
-which is a :class:`tuple` of *N* positive integers that specify the
+which is a :class:`tuple` of *N* non-negative integers that specify the
 sizes of each dimension. The type of items in the array is specified by
 a separate :ref:`data-type object (dtype) <arrays.dtypes>`, one of which
 is associated with each ndarray.
@@ -37,7 +37,7 @@ objects implementing the :class:`buffer` or :ref:`array
 
    >>> x = np.array([[1, 2, 3], [4, 5, 6]], np.int32)
    >>> type(x)
-   <type 'numpy.ndarray'>
+   <class 'numpy.ndarray'>
    >>> x.shape
    (2, 3)
    >>> x.dtype
@@ -47,6 +47,7 @@ objects implementing the :class:`buffer` or :ref:`array
 
    >>> # The element of x in the *second* row, *third* column, namely, 6.
    >>> x[1, 2]
+   6
 
    For example :ref:`slicing <arrays.indexing>` can produce views of
    the array:
@@ -329,7 +330,7 @@ Item selection and manipulation
 -------------------------------
 
 For array methods that take an *axis* keyword, it defaults to
-:const:`None`. If axis is *None*, then the array is treated as a 1-D
+*None*. If axis is *None*, then the array is treated as a 1-D
 array. Any other value for *axis* represents the dimension along which
 the operation should proceed.
 
@@ -371,6 +372,7 @@ Many of these methods take an argument named *axis*. In such cases,
    A 3-dimensional array of size 3 x 3 x 3, summed over each of its
    three axes
 
+   >>> x = np.arange(27).reshape((3,3,3))
    >>> x
    array([[[ 0,  1,  2],
            [ 3,  4,  5],
@@ -511,10 +513,6 @@ Arithmetic:
 
    - Any third argument to :func:`pow()` is silently ignored,
      as the underlying :func:`ufunc <power>` takes only two arguments.
-
-   - The three division operators are all defined; :obj:`div` is active
-     by default, :obj:`truediv` is active when
-     :obj:`__future__` division is in effect.
 
    - Because :class:`ndarray` is a built-in type (written in C), the
      ``__r{op}__`` special methods are not directly defined.

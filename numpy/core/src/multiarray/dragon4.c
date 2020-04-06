@@ -1,31 +1,33 @@
 /*
  * Copyright (c) 2014 Ryan Juckett
- * http://www.ryanjuckett.com/
  *
- * This software is provided 'as-is', without any express or implied
- * warranty. In no event will the authors be held liable for any damages
- * arising from the use of this software.
+ * Permission is hereby granted, free of charge, to any person obtaining a copy
+ * of this software and associated documentation files (the "Software"), to
+ * deal in the Software without restriction, including without limitation the
+ * rights to use, copy, modify, merge, publish, distribute, sublicense, and/or
+ * sell copies of the Software, and to permit persons to whom the Software is
+ * furnished to do so, subject to the following conditions:
  *
- * Permission is granted to anyone to use this software for any purpose,
- * including commercial applications, and to alter it and redistribute it
- * freely, subject to the following restrictions:
+ * The above copyright notice and this permission notice shall be included in
+ * all copies or substantial portions of the Software.
  *
- * 1. The origin of this software must not be misrepresented; you must not
- *    claim that you wrote the original software. If you use this software
- *    in a product, an acknowledgment in the product documentation would be
- *    appreciated but is not required.
- *
- * 2. Altered source versions must be plainly marked as such, and must not be
- *    misrepresented as being the original software.
- *
- * 3. This notice may not be removed or altered from any source
- *    distribution.
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
+ * FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
+ * IN THE SOFTWARE.
  */
 
 /*
  * This file contains a modified version of Ryan Juckett's Dragon4
- * implementation, which has been ported from C++ to C and which has
+ * implementation, obtained from http://www.ryanjuckett.com,
+ * which has been ported from C++ to C and which has
  * modifications specific to printing floats in numpy.
+ *
+ * Ryan Juckett's original code was under the Zlib license; he gave numpy
+ * permission to include it under the MIT license instead.
  */
 
 #include "dragon4.h"
@@ -874,7 +876,7 @@ BigInt_Pow2(BigInt *result, npy_uint32 exponent)
     result->length = blockIdx + 1;
 
     bitIdx = (exponent % 32);
-    result->blocks[blockIdx] |= (1 << bitIdx);
+    result->blocks[blockIdx] |= ((npy_uint32)1 << bitIdx);
 }
 
 /*
@@ -1563,8 +1565,8 @@ Dragon4(BigInt *bigints, const npy_int32 exponent,
 /* Options struct for easy passing of Dragon4 options.
  *
  *   scientific - boolean controlling whether scientific notation is used
- *   digit_mode - whether to use unique or fixed fracional output
- *   cutoff_mode - whether 'precision' refers to toal digits, or digits past
+ *   digit_mode - whether to use unique or fixed fractional output
+ *   cutoff_mode - whether 'precision' refers to to all digits, or digits past
  *                 the decimal point.
  *   precision - When negative, prints as many digits as needed for a unique
  *               number. When positive specifies the maximum number of
@@ -3181,19 +3183,19 @@ Dragon4_Positional(PyObject *obj, DigitMode digit_mode, CutoffMode cutoff_mode,
     opt.exp_digits = -1;
 
     if (PyArray_IsScalar(obj, Half)) {
-        npy_half x = ((PyHalfScalarObject *)obj)->obval;
+        npy_half x = PyArrayScalar_VAL(obj, Half);
         return Dragon4_Positional_Half_opt(&x, &opt);
     }
     else if (PyArray_IsScalar(obj, Float)) {
-        npy_float x = ((PyFloatScalarObject *)obj)->obval;
+        npy_float x = PyArrayScalar_VAL(obj, Float);
         return Dragon4_Positional_Float_opt(&x, &opt);
     }
     else if (PyArray_IsScalar(obj, Double)) {
-        npy_double x = ((PyDoubleScalarObject *)obj)->obval;
+        npy_double x = PyArrayScalar_VAL(obj, Double);
         return Dragon4_Positional_Double_opt(&x, &opt);
     }
     else if (PyArray_IsScalar(obj, LongDouble)) {
-        npy_longdouble x = ((PyLongDoubleScalarObject *)obj)->obval;
+        npy_longdouble x = PyArrayScalar_VAL(obj, LongDouble);
         return Dragon4_Positional_LongDouble_opt(&x, &opt);
     }
 
@@ -3222,19 +3224,19 @@ Dragon4_Scientific(PyObject *obj, DigitMode digit_mode, int precision,
     opt.exp_digits = exp_digits;
 
     if (PyArray_IsScalar(obj, Half)) {
-        npy_half x = ((PyHalfScalarObject *)obj)->obval;
+        npy_half x = PyArrayScalar_VAL(obj, Half);
         return Dragon4_Scientific_Half_opt(&x, &opt);
     }
     else if (PyArray_IsScalar(obj, Float)) {
-        npy_float x = ((PyFloatScalarObject *)obj)->obval;
+        npy_float x = PyArrayScalar_VAL(obj, Float);
         return Dragon4_Scientific_Float_opt(&x, &opt);
     }
     else if (PyArray_IsScalar(obj, Double)) {
-        npy_double x = ((PyDoubleScalarObject *)obj)->obval;
+        npy_double x = PyArrayScalar_VAL(obj, Double);
         return Dragon4_Scientific_Double_opt(&x, &opt);
     }
     else if (PyArray_IsScalar(obj, LongDouble)) {
-        npy_longdouble x = ((PyLongDoubleScalarObject *)obj)->obval;
+        npy_longdouble x = PyArrayScalar_VAL(obj, LongDouble);
         return Dragon4_Scientific_LongDouble_opt(&x, &opt);
     }
 

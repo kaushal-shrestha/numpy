@@ -3,10 +3,9 @@ The arraypad module contains a group of functions to pad values onto the edges
 of an n-dimensional array.
 
 """
-from __future__ import division, absolute_import, print_function
-
 import numpy as np
 from numpy.core.overrides import array_function_dispatch
+from numpy.lib.index_tricks import ndindex
 
 
 __all__ = ['pad']
@@ -14,66 +13,6 @@ __all__ = ['pad']
 
 ###############################################################################
 # Private utility functions.
-
-
-def _linear_ramp(ndim, axis, start, stop, size, reverse=False):
-    """
-    Create a linear ramp of `size` in `axis` with `ndim`.
-
-    This algorithm behaves like a vectorized version of `numpy.linspace`.
-    The resulting linear ramp is broadcastable to any array that matches the
-    ramp in `shape[axis]` and `ndim`.
-
-    Parameters
-    ----------
-    ndim : int
-        Number of dimensions of the resulting array. All dimensions except
-        the one specified by `axis` will have the size 1.
-    axis : int
-        The dimension that contains the linear ramp of `size`.
-    start : int or ndarray
-        The starting value(s) of the linear ramp. If given as an array, its
-        size must match `size`.
-    stop : int or ndarray
-        The stop value(s) (not included!) of the linear ramp. If given as an
-        array, its size must match `size`.
-    size : int
-        The number of elements in the linear ramp. If this argument is 0 the
-        dimensions of `ramp` will all be of length 1 except for the one given
-        by `axis` which will be 0.
-    reverse : bool
-        If False, increment in a positive fashion, otherwise decrement.
-
-    Returns
-    -------
-    ramp : ndarray
-        Output array of dtype np.float64 that in- or decrements along the given
-        `axis`.
-
-    Examples
-    --------
-    >>> _linear_ramp(ndim=2, axis=0, start=np.arange(3), stop=10, size=2)
-    array([[0. , 1. , 2. ],
-           [5. , 5.5, 6. ]])
-    >>> _linear_ramp(ndim=3, axis=0, start=2, stop=0, size=0)
-    array([], shape=(0, 1, 1), dtype=float64)
-    """
-    # Create initial ramp
-    ramp = np.arange(size, dtype=np.float64)
-    if reverse:
-        ramp = ramp[::-1]
-
-    # Make sure, that ramp is broadcastable
-    init_shape = (1,) * axis + (size,) + (1,) * (ndim - axis - 1)
-    ramp = ramp.reshape(init_shape)
-
-    if size != 0:
-        # And scale to given start and stop values
-        gain = (stop - start) / float(size)
-        ramp = ramp * gain
-        ramp += start
-
-    return ramp
 
 
 def _round_if_needed(arr, dtype):
@@ -268,24 +207,32 @@ def _get_linear_ramps(padded, axis, width_pair, end_value_pair):
     """
     edge_pair = _get_edges(padded, axis, width_pair)
 
-    left_ramp = _linear_ramp(
-        padded.ndim, axis, start=end_value_pair[0], stop=edge_pair[0],
-        size=width_pair[0], reverse=False
+    left_ramp = np.linspace(
+        start=end_value_pair[0],
+        stop=edge_pair[0].squeeze(axis),  # Dimensions is replaced by linspace
+        num=width_pair[0],
+        endpoint=False,
+        dtype=padded.dtype,
+        axis=axis,
     )
-    _round_if_needed(left_ramp, padded.dtype)
 
-    right_ramp = _linear_ramp(
-        padded.ndim, axis, start=end_value_pair[1], stop=edge_pair[1],
-        size=width_pair[1], reverse=True
+    right_ramp = np.linspace(
+        start=end_value_pair[1],
+        stop=edge_pair[1].squeeze(axis),  # Dimension is replaced by linspace
+        num=width_pair[1],
+        endpoint=False,
+        dtype=padded.dtype,
+        axis=axis,
     )
-    _round_if_needed(right_ramp, padded.dtype)
+    # Reverse linear space in appropriate dimension
+    right_ramp = right_ramp[_slice_at_axis(slice(None, None, -1), axis)]
 
     return left_ramp, right_ramp
 
 
 def _get_stats(padded, axis, width_pair, length_pair, stat_func):
     """
-    Calculate statistic for the empty-padded array in given dimnsion.
+    Calculate statistic for the empty-padded array in given dimension.
 
     Parameters
     ----------
@@ -322,6 +269,12 @@ def _get_stats(padded, axis, width_pair, length_pair, stat_func):
     if right_length is None or max_length < right_length:
         right_length = max_length
 
+    if (left_length == 0 or right_length == 0) \
+            and stat_func in {np.amax, np.amin}:
+        # amax and amin can't operate on an empty array,
+        # raise a more descriptive warning here instead of the default one
+        raise ValueError("stat_length of 0 yields no value for padding")
+
     # Calculate statistic for the left side
     left_slice = _slice_at_axis(
         slice(left_index, left_index + left_length), axis)
@@ -339,6 +292,7 @@ def _get_stats(padded, axis, width_pair, length_pair, stat_func):
     right_chunk = padded[right_slice]
     right_stat = stat_func(right_chunk, axis=axis, keepdims=True)
     _round_if_needed(right_stat, padded.dtype)
+
     return left_stat, right_stat
 
 
@@ -797,9 +751,21 @@ def pad(array, pad_width, mode='constant', **kwargs):
         # Create a new zero padded array
         padded, _ = _pad_simple(array, pad_width, fill_value=0)
         # And apply along each axis
+
         for axis in range(padded.ndim):
-            np.apply_along_axis(
-                function, axis, padded, pad_width[axis], axis, kwargs)
+            # Iterate using ndindex as in apply_along_axis, but assuming that
+            # function operates inplace on the padded array.
+
+            # view with the iteration axis at the end
+            view = np.moveaxis(padded, axis, -1)
+
+            # compute indices for the iteration axes, and append a trailing
+            # ellipsis to prevent 0d arrays decaying to scalars (gh-8642)
+            inds = ndindex(view.shape[:-1])
+            inds = (ind + (Ellipsis,) for ind in inds)
+            for ind in inds:
+                function(view[ind], pad_width[axis], axis, kwargs)
+
         return padded
 
     # Make sure that no unsupported keywords were passed for the current mode
@@ -822,7 +788,7 @@ def pad(array, pad_width, mode='constant', **kwargs):
         raise ValueError("unsupported keyword arguments for mode '{}': {}"
                          .format(mode, unsupported_kwargs))
 
-    stat_functions = {"maximum": np.max, "minimum": np.min,
+    stat_functions = {"maximum": np.amax, "minimum": np.amin,
                       "mean": np.mean, "median": np.median}
 
     # Create array with final shape and original values

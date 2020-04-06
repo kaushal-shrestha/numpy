@@ -38,14 +38,14 @@ basic steps for doing this in Python are well-documented and you can
 find more information in the documentation for Python itself available
 online at `www.python.org <https://www.python.org>`_ .
 
-In addition to the Python C-API, there is a full and rich C-API for
-NumPy allowing sophisticated manipulations on a C-level. However, for
-most applications, only a few API calls will typically be used. If all
-you need to do is extract a pointer to memory along with some shape
-information to pass to another calculation routine, then you will use
-very different calls, then if you are trying to create a new array-
-like type or add a new data type for ndarrays. This chapter documents
-the API calls and macros that are most commonly used.
+In addition to the Python C-API, there is a full and rich C-API for NumPy
+allowing sophisticated manipulations on a C-level. However, for most
+applications, only a few API calls will typically be used. For example, if you
+need to just extract a pointer to memory along with some shape information to
+pass to another calculation routine, then you will use very different calls
+than if you are trying to create a new array-like type or add a new data type
+for ndarrays. This chapter documents the API calls and macros that are most
+commonly used.
 
 
 Required subroutine
@@ -342,7 +342,7 @@ The method is to
 
 4. If you are writing the algorithm, then I recommend that you use the
    stride information contained in the array to access the elements of
-   the array (the :c:func:`PyArray_GETPTR` macros make this painless). Then,
+   the array (the :c:func:`PyArray_GetPtr` macros make this painless). Then,
    you can relax your requirements so as not to force a single-segment
    array and the data-copying that might result.
 
@@ -463,7 +463,7 @@ writeable). The syntax is
 
             This flag is useful to specify an array that will be used for both
             input and output. :c:func:`PyArray_ResolveWritebackIfCopy`
-            must be called before :func:`Py_DECREF` at
+            must be called before :c:func:`Py_DECREF` at
             the end of the interface routine to write back the temporary data
             into the original array passed in. Use
             of the :c:data:`NPY_ARRAY_WRITEBACKIFCOPY` or
@@ -504,7 +504,7 @@ writeable). The syntax is
 Creating a brand-new ndarray
 ----------------------------
 
-Quite often new arrays must be created from within extension-module
+Quite often, new arrays must be created from within extension-module
 code. Perhaps an output array is needed and you don't want the caller
 to have to supply it. Perhaps only a temporary array is needed to hold
 an intermediate calculation. Whatever the need there are simple ways
@@ -512,42 +512,9 @@ to get an ndarray object of whatever data-type is needed. The most
 general function for doing this is :c:func:`PyArray_NewFromDescr`. All array
 creation functions go through this heavily re-used code. Because of
 its flexibility, it can be somewhat confusing to use. As a result,
-simpler forms exist that are easier to use.
-
-:c:func:`PyArray_SimpleNew`
-
-    This function allocates new memory and places it in an ndarray
-    with *nd* dimensions whose shape is determined by the array of
-    at least *nd* items pointed to by *dims*. The memory for the
-    array is uninitialized (unless typenum is :c:data:`NPY_OBJECT` in
-    which case each element in the array is set to NULL). The
-    *typenum* argument allows specification of any of the builtin
-    data-types such as :c:data:`NPY_FLOAT` or :c:data:`NPY_LONG`. The
-    memory for the array can be set to zero if desired using
-    :c:func:`PyArray_FILLWBYTE` (return_object, 0).
-
-:c:func:`PyArray_SimpleNewFromData`
-
-    Sometimes, you want to wrap memory allocated elsewhere into an
-    ndarray object for downstream use. This routine makes it
-    straightforward to do that. The first three arguments are the same
-    as in :c:func:`PyArray_SimpleNew`, the final argument is a pointer to a
-    block of contiguous memory that the ndarray should use as it's
-    data-buffer which will be interpreted in C-style contiguous
-    fashion. A new reference to an ndarray is returned, but the
-    ndarray will not own its data. When this ndarray is deallocated,
-    the pointer will not be freed.
-
-    You should ensure that the provided memory is not freed while the
-    returned array is in existence. The easiest way to handle this is
-    if data comes from another reference-counted Python object. The
-    reference count on this object should be increased after the
-    pointer is passed in, and the base member of the returned ndarray
-    should point to the Python object that owns the data. Then, when
-    the ndarray is deallocated, the base-member will be DECREF'd
-    appropriately. If you want the memory to be freed as soon as the
-    ndarray is deallocated then simply set the OWNDATA flag on the
-    returned ndarray.
+simpler forms exist that are easier to use. These forms are part of the
+:c:func:`PyArray_SimpleNew` family of functions, which simplify the interface
+by providing default values for common use cases.
 
 
 Getting at ndarray memory and accessing elements of the ndarray
@@ -563,7 +530,7 @@ specific element of the array is determined only by the array of
 npy_intp variables, :c:func:`PyArray_STRIDES` (obj). In particular, this
 c-array of integers shows how many **bytes** must be added to the
 current element pointer to get to the next element in each dimension.
-For arrays less than 4-dimensions there are :c:func:`PyArray_GETPTR{k}`
+For arrays less than 4-dimensions there are ``PyArray_GETPTR{k}``
 (obj, ...) macros where {k} is the integer 1, 2, 3, or 4 that make
 using the array strides easier. The arguments .... represent {k} non-
 negative integer indices into the array. For example, suppose ``E`` is
@@ -576,7 +543,7 @@ contiguous arrays have particular striding patterns. Two array flags
 whether or not the striding pattern of a particular array matches the
 C-style contiguous or Fortran-style contiguous or neither. Whether or
 not the striding pattern matches a standard C or Fortran one can be
-tested Using :c:func:`PyArray_ISCONTIGUOUS` (obj) and
+tested Using :c:func:`PyArray_IS_C_CONTIGUOUS` (obj) and
 :c:func:`PyArray_ISFORTRAN` (obj) respectively. Most third-party
 libraries expect contiguous arrays.  But, often it is not difficult to
 support general-purpose striding. I encourage you to use the striding

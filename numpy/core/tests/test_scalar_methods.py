@@ -1,22 +1,16 @@
 """
 Test the scalar constructors, which also do type-coercion
 """
-from __future__ import division, absolute_import, print_function
-
-import os
 import fractions
 import platform
 
 import pytest
 import numpy as np
 
-from numpy.testing import (
-    run_module_suite,
-    assert_equal, assert_almost_equal, assert_raises, assert_warns,
-    dec
-)
+from numpy.testing import assert_equal, assert_raises
 
-class TestAsIntegerRatio(object):
+
+class TestAsIntegerRatio:
     # derived in part from the cpython test "test_floatasratio"
 
     @pytest.mark.parametrize("ftype", [
@@ -64,7 +58,7 @@ class TestAsIntegerRatio(object):
                      R(*np.double(2.1).as_integer_ratio()))
         assert_equal(R(-4728779608739021, 2251799813685248),
                      R(*np.double(-2.1).as_integer_ratio()))
-        # longdouble is platform depedent
+        # longdouble is platform dependent
 
     @pytest.mark.parametrize("ftype, frac_vals, exp_vals", [
         # dtype test cases generated using hypothesis

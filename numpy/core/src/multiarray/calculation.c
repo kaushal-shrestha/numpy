@@ -772,11 +772,7 @@ PyArray_Mean(PyArrayObject *self, int axis, int rtype, PyArrayObject *out)
         return NULL;
     }
     if (!out) {
-#if defined(NPY_PY3K)
         ret = PyNumber_TrueDivide(obj1, obj2);
-#else
-        ret = PyNumber_Divide(obj1, obj2);
-#endif
     }
     else {
         ret = PyObject_CallFunction(n_ops.divide, "OOO", out, obj2, out);
@@ -918,6 +914,28 @@ PyArray_Clip(PyArrayObject *self, PyObject *min, PyObject *max, PyArrayObject *o
     }
 
     func = PyArray_DESCR(self)->f->fastclip;
+    if (func == NULL) {
+        if (min == NULL) {
+            return PyObject_CallFunctionObjArgs(n_ops.minimum, self, max, out, NULL);
+        }
+        else if (max == NULL) {
+            return PyObject_CallFunctionObjArgs(n_ops.maximum, self, min, out, NULL);
+        }
+        else {
+            return PyObject_CallFunctionObjArgs(n_ops.clip, self, min, max, out, NULL);
+        }
+    }
+
+    /*
+     * NumPy 1.17.0, 2019-02-24
+     * NumPy 1.19.0, 2020-01-15
+     *
+     * Setting `->f->fastclip to anything but NULL has been deprecated in 1.19
+     * the code path below was previously deprecated since 1.17.
+     * (the deprecation moved to registration time instead of execution time)
+     * everything below can be removed once this deprecation completes
+     */
+
     if (func == NULL
         || (min != NULL && !PyArray_CheckAnyScalar(min))
         || (max != NULL && !PyArray_CheckAnyScalar(max))

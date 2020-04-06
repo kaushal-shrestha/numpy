@@ -1,18 +1,16 @@
 """ Basic functions for manipulating 2d arrays
 
 """
-from __future__ import division, absolute_import, print_function
-
 import functools
 
 from numpy.core.numeric import (
-    absolute, asanyarray, arange, zeros, greater_equal, multiply, ones,
+    asanyarray, arange, zeros, greater_equal, multiply, ones,
     asarray, where, int8, int16, int32, int64, empty, promote_types, diagonal,
     nonzero
     )
 from numpy.core.overrides import set_module
 from numpy.core import overrides
-from numpy.core import iinfo, transpose
+from numpy.core import iinfo
 
 
 __all__ = [
@@ -368,7 +366,7 @@ def tri(N, M=None, k=0, dtype=float):
     -------
     tri : ndarray of shape (N, M)
         Array with its lower triangle filled with ones and zero elsewhere;
-        in other words ``T[i,j] == 1`` for ``i <= j + k``, 0 otherwise.
+        in other words ``T[i,j] == 1`` for ``j <= i + k``, 0 otherwise.
 
     Examples
     --------
@@ -565,7 +563,20 @@ def vander(x, N=None, increasing=False):
 
 def _histogram2d_dispatcher(x, y, bins=None, range=None, normed=None,
                             weights=None, density=None):
-    return (x, y, bins, weights)
+    yield x
+    yield y
+
+    # This terrible logic is adapted from the checks in histogram2d
+    try:
+        N = len(bins)
+    except TypeError:
+        N = 1
+    if N == 2:
+        yield from bins  # bins=[x, y]
+    else:
+        yield bins
+
+    yield weights
 
 
 @array_function_dispatch(_histogram2d_dispatcher)

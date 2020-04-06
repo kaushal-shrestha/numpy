@@ -324,7 +324,7 @@ _find_array_prepare(ufunc_full_args args,
 NPY_NO_EXPORT int
 set_matmul_flags(PyObject *d)
 {
-    PyObject *matmul = PyDict_GetItemString(d, "matmul");
+    PyObject *matmul = _PyDict_GetItemStringWithError(d, "matmul");
     if (matmul == NULL) {
         return -1;
     }
@@ -397,7 +397,7 @@ _ufunc_setup_flags(PyUFuncObject *ufunc, npy_uint32 op_in_flags,
  * A NULL is placed in output_wrap for outputs that
  * should just have PyArray_Return called.
  */
-static void
+static int
 _find_array_wrap(ufunc_full_args args, PyObject *kwds,
                 PyObject **output_wrap, int nin, int nout)
 {
@@ -409,9 +409,12 @@ _find_array_wrap(ufunc_full_args args, PyObject *kwds,
      * If a 'subok' parameter is passed and isn't True, don't wrap but put None
      * into slots with out arguments which means return the out argument
      */
-    if (kwds != NULL && (obj = PyDict_GetItem(kwds,
-                                              npy_um_str_subok)) != NULL) {
-        if (obj != Py_True) {
+    if (kwds != NULL) {
+        obj = PyDict_GetItemWithError(kwds, npy_um_str_subok);
+        if (obj == NULL && PyErr_Occurred()) {
+            return -1;
+        }
+        else if (obj != NULL && obj != Py_True) {
             /* skip search for wrap members */
             goto handle_out;
         }
@@ -450,7 +453,7 @@ handle_out:
     }
 
     Py_XDECREF(wrap);
-    return;
+    return 0;
 }
 
 
@@ -654,8 +657,8 @@ _parse_signature(PyUFuncObject *ufunc, const char *signature)
         PyErr_NoMemory();
         goto fail;
     }
-    for (i = 0; i < len; i++) {
-        ufunc->core_dim_flags[i] = 0;
+    for (size_t j = 0; j < len; j++) {
+        ufunc->core_dim_flags[j] = 0;
     }
 
     i = _next_non_white_space(signature, 0);
@@ -908,7 +911,7 @@ parse_ufunc_keywords(PyUFuncObject *ufunc, PyObject *kwds, PyObject **kwnames, .
     typedef int converter(PyObject *, void *);
 
     while (PyDict_Next(kwds, &pos, &key, &value)) {
-        int i;
+        npy_intp i;
         converter *convert;
         void *output = NULL;
         npy_intp index = locate_key(kwnames, key);
@@ -929,22 +932,9 @@ parse_ufunc_keywords(PyUFuncObject *ufunc, PyObject *kwds, PyObject **kwnames, .
             }
         }
         else {
-#if PY_VERSION_HEX >= 0x03000000
             PyErr_Format(PyExc_TypeError,
                          "'%S' is an invalid keyword to ufunc '%s'",
                          key, ufunc_get_name_cstr(ufunc));
-#else
-            char *str = PyString_AsString(key);
-            if (str == NULL) {
-                PyErr_Clear();
-                PyErr_SetString(PyExc_TypeError, "invalid keyword argument");
-            }
-            else {
-                PyErr_Format(PyExc_TypeError,
-                             "'%s' is an invalid keyword to ufunc '%s'",
-                             str, ufunc_get_name_cstr(ufunc));
-            }
-#endif
             return -1;
         }
     }
@@ -1044,7 +1034,7 @@ get_ufunc_arguments(PyUFuncObject *ufunc,
     int nin = ufunc->nin;
     int nout = ufunc->nout;
     int nop = ufunc->nargs;
-    PyObject *obj, *context;
+    PyObject *obj;
     PyArray_Descr *dtype = NULL;
     /*
      * Initialize output objects so caller knows when outputs and optional
@@ -1081,22 +1071,8 @@ get_ufunc_arguments(PyUFuncObject *ufunc,
             out_op[i] = (PyArrayObject *)PyArray_FromArray(obj_a, NULL, 0);
         }
         else {
-            if (!PyArray_IsScalar(obj, Generic)) {
-                /*
-                 * TODO: There should be a comment here explaining what
-                 *       context does.
-                 */
-                context = Py_BuildValue("OOi", ufunc, args, i);
-                if (context == NULL) {
-                    goto fail;
-                }
-            }
-            else {
-                context = NULL;
-            }
             out_op[i] = (PyArrayObject *)PyArray_FromAny(obj,
-                                    NULL, 0, 0, 0, context);
-            Py_XDECREF(context);
+                                    NULL, 0, 0, 0, NULL);
         }
 
         if (out_op[i] == NULL) {
@@ -1193,34 +1169,11 @@ get_ufunc_arguments(PyUFuncObject *ufunc,
                 }
             }
             else {
-                /*
-                 * If the deprecated behavior is ever removed,
-                 * keep only the else branch of this if-else
-                 */
-                if (PyArray_Check(out_kwd) || out_kwd == Py_None) {
-                    if (DEPRECATE("passing a single array to the "
-                                  "'out' keyword argument of a "
-                                  "ufunc with\n"
-                                  "more than one output will "
-                                  "result in an error in the "
-                                  "future") < 0) {
-                        /* The future error message */
-                        PyErr_SetString(PyExc_TypeError,
-                                        "'out' must be a tuple of arrays");
-                        goto fail;
-                    }
-                    if (_set_out_array(out_kwd, out_op+nin) < 0) {
-                        goto fail;
-                    }
-                }
-                else {
-                    PyErr_SetString(PyExc_TypeError,
-                                    nout > 1 ? "'out' must be a tuple "
-                                    "of arrays" :
-                                    "'out' must be an array or a "
-                                    "tuple of a single array");
-                    goto fail;
-                }
+                PyErr_SetString(PyExc_TypeError,
+                        nout > 1 ? "'out' must be a tuple of arrays" :
+                                   "'out' must be an array or a tuple with "
+                                   "a single array");
+                goto fail;
             }
         }
         /*
@@ -1964,7 +1917,15 @@ make_full_arg_tuple(
     }
 
     /* Look for output keyword arguments */
-    out_kwd = kwds ? PyDict_GetItem(kwds, npy_um_str_out) : NULL;
+    if (kwds) {
+        out_kwd = PyDict_GetItemWithError(kwds, npy_um_str_out);
+        if (out_kwd == NULL && PyErr_Occurred()) {
+            goto fail;
+        }
+    }
+    else {
+        out_kwd = NULL;
+    }
 
     if (out_kwd != NULL) {
         assert(nargs == nin);
@@ -2297,7 +2258,7 @@ _parse_axes_arg(PyUFuncObject *ufunc, int op_core_num_dims[], PyObject *axes,
  * Returns 0 on success, and -1 on failure
  */
 static int
-_parse_axis_arg(PyUFuncObject *ufunc, int core_num_dims[], PyObject *axis,
+_parse_axis_arg(PyUFuncObject *ufunc, const int core_num_dims[], PyObject *axis,
                 PyArrayObject **op, int broadcast_ndim, int **remap_axis) {
     int nop = ufunc->nargs;
     int iop, axis_int;
@@ -2368,7 +2329,7 @@ _parse_axis_arg(PyUFuncObject *ufunc, int core_num_dims[], PyObject *axis,
  */
 static int
 _get_coredim_sizes(PyUFuncObject *ufunc, PyArrayObject **op,
-                   int *op_core_num_dims, npy_uint32 *core_dim_flags,
+                   const int *op_core_num_dims, npy_uint32 *core_dim_flags,
                    npy_intp *core_dim_sizes, int **remap_axis) {
     int i;
     int nin = ufunc->nin;
@@ -3091,17 +3052,15 @@ fail:
     return retval;
 }
 
-/*UFUNC_API
- *
+/*
  * This generic function is called with the ufunc object, the arguments to it,
  * and an array of (pointers to) PyArrayObjects which are NULL.
  *
  * 'op' is an array of at least NPY_MAXARGS PyArrayObject *.
  */
-NPY_NO_EXPORT int
-PyUFunc_GenericFunction(PyUFuncObject *ufunc,
-                        PyObject *args, PyObject *kwds,
-                        PyArrayObject **op)
+static int
+PyUFunc_GenericFunction_int(PyUFuncObject *ufunc,
+        PyObject *args, PyObject *kwds, PyArrayObject **op)
 {
     int nin, nout;
     int i, nop;
@@ -3307,6 +3266,27 @@ fail:
     return retval;
 }
 
+
+/*UFUNC_API*/
+NPY_NO_EXPORT int
+PyUFunc_GenericFunction(PyUFuncObject *ufunc,
+        PyObject *args, PyObject *kwds, PyArrayObject **op)
+{
+    /* NumPy 1.19, 2020-01-24 */
+    if (DEPRECATE(
+            "PyUFunc_GenericFunction() C-API function is deprecated "
+            "and expected to be removed rapidly. If you are using it (i.e. see "
+            "this warning/error), please notify the NumPy developers. "
+            "As of now it is expected that any use case is served better by "
+            "the direct use of `PyObject_Call(ufunc, args, kwargs)`. "
+            "PyUFunc_GenericFunction function has slightly different "
+            "untested behaviour.") < 0) {
+        return -1;
+    }
+    return PyUFunc_GenericFunction_int(ufunc, args, kwds, op);
+}
+
+
 /*
  * Given the output type, finds the specified binary op.  The
  * ufunc must have nin==2 and nout==1.  The function may modify
@@ -3332,9 +3312,12 @@ get_binary_op_function(PyUFuncObject *ufunc, int *otype,
         if (key == NULL) {
             return -1;
         }
-        obj = PyDict_GetItem(ufunc->userloops, key);
+        obj = PyDict_GetItemWithError(ufunc->userloops, key);
         Py_DECREF(key);
-        if (obj != NULL) {
+        if (obj == NULL && PyErr_Occurred()) {
+            return -1;
+        }
+        else if (obj != NULL) {
             funcdata = (PyUFunc_Loop1d *)NpyCapsule_AsVoidPtr(obj);
             while (funcdata != NULL) {
                 int *types = funcdata->arg_types;
@@ -3460,8 +3443,8 @@ reduce_type_resolver(PyUFuncObject *ufunc, PyArrayObject *arr,
 }
 
 static int
-reduce_loop(NpyIter *iter, char **dataptrs, npy_intp *strides,
-            npy_intp *countptr, NpyIter_IterNextFunc *iternext,
+reduce_loop(NpyIter *iter, char **dataptrs, npy_intp const *strides,
+            npy_intp const *countptr, NpyIter_IterNextFunc *iternext,
             int needs_api, npy_intp skip_first_count, void *data)
 {
     PyArray_Descr *dtypes[3], **iter_dtypes;
@@ -3893,8 +3876,6 @@ PyUFunc_Accumulate(PyUFuncObject *ufunc, PyArrayObject *arr, PyArrayObject *out,
         stride_copy[1] = stride1;
         stride_copy[2] = stride0;
 
-        needs_api = NpyIter_IterationNeedsAPI(iter);
-
         NPY_BEGIN_THREADS_NDITER(iter);
 
         do {
@@ -4053,14 +4034,14 @@ PyUFunc_Reduceat(PyUFuncObject *ufunc, PyArrayObject *arr, PyArrayObject *ind,
     int *op_axes[3] = {op_axes_arrays[0], op_axes_arrays[1],
                             op_axes_arrays[2]};
     npy_uint32 op_flags[3];
-    int i, idim, ndim, otype_final;
+    int idim, ndim, otype_final;
     int need_outer_iterator = 0;
 
     NpyIter *iter = NULL;
 
     /* The reduceat indices - ind must be validated outside this call */
     npy_intp *reduceat_ind;
-    npy_intp ind_size, red_axis_size;
+    npy_intp i, ind_size, red_axis_size;
     /* The selected inner loop */
     PyUFuncGenericFunction innerloop = NULL;
     void *innerloopdata = NULL;
@@ -4081,8 +4062,8 @@ PyUFunc_Reduceat(PyUFuncObject *ufunc, PyArrayObject *arr, PyArrayObject *ind,
     for (i = 0; i < ind_size; ++i) {
         if (reduceat_ind[i] < 0 || reduceat_ind[i] >= red_axis_size) {
             PyErr_Format(PyExc_IndexError,
-                "index %d out-of-bounds in %s.%s [0, %d)",
-                (int)reduceat_ind[i], ufunc_name, opname, (int)red_axis_size);
+                "index %" NPY_INTP_FMT " out-of-bounds in %s.%s [0, %" NPY_INTP_FMT ")",
+                reduceat_ind[i], ufunc_name, opname, red_axis_size);
             return NULL;
         }
     }
@@ -4146,7 +4127,7 @@ PyUFunc_Reduceat(PyUFuncObject *ufunc, PyArrayObject *arr, PyArrayObject *ind,
 #endif
 
     /* Set up the op_axes for the outer loop */
-    for (i = 0, idim = 0; idim < ndim; ++idim) {
+    for (idim = 0; idim < ndim; ++idim) {
         /* Use the i-th iteration dimension to match up ind */
         if (idim == axis) {
             op_axes_arrays[0][idim] = axis;
@@ -4419,7 +4400,7 @@ PyUFunc_GenericReduction(PyUFuncObject *ufunc, PyObject *args,
     PyObject *axes_in = NULL;
     PyArrayObject *mp = NULL, *wheremask = NULL, *ret = NULL;
     PyObject *op;
-    PyObject *obj_ind, *context;
+    PyObject *obj_ind;
     PyArrayObject *indices = NULL;
     PyArray_Descr *otype = NULL;
     PyArrayObject *out = NULL;
@@ -4458,8 +4439,11 @@ PyUFunc_GenericReduction(PyUFuncObject *ufunc, PyObject *args,
     }
     /* if there is a tuple of 1 for `out` in kwds, unpack it */
     if (kwds != NULL) {
-        PyObject *out_obj = PyDict_GetItem(kwds, npy_um_str_out);
-        if (out_obj != NULL && PyTuple_CheckExact(out_obj)) {
+        PyObject *out_obj = PyDict_GetItemWithError(kwds, npy_um_str_out);
+        if (out_obj == NULL && PyErr_Occurred()){
+            return NULL;
+        }
+        else if (out_obj != NULL && PyTuple_CheckExact(out_obj)) {
             if (PyTuple_GET_SIZE(out_obj) != 1) {
                 PyErr_SetString(PyExc_ValueError,
                                 "The 'out' tuple must have exactly one entry");
@@ -4510,14 +4494,7 @@ PyUFunc_GenericReduction(PyUFuncObject *ufunc, PyObject *args,
         }
     }
     /* Ensure input is an array */
-    if (!PyArray_Check(op) && !PyArray_IsScalar(op, Generic)) {
-        context = Py_BuildValue("O(O)i", ufunc, op, 0);
-    }
-    else {
-        context = NULL;
-    }
-    mp = (PyArrayObject *)PyArray_FromAny(op, NULL, 0, 0, 0, context);
-    Py_XDECREF(context);
+    mp = (PyArrayObject *)PyArray_FromAny(op, NULL, 0, 0, 0, NULL);
     if (mp == NULL) {
         goto fail;
     }
@@ -4721,7 +4698,7 @@ ufunc_generic_call(PyUFuncObject *ufunc, PyObject *args, PyObject *kwds)
         return override;
     }
 
-    errval = PyUFunc_GenericFunction(ufunc, args, kwds, mps);
+    errval = PyUFunc_GenericFunction_int(ufunc, args, kwds, mps);
     if (errval < 0) {
         return NULL;
     }
@@ -4751,7 +4728,9 @@ ufunc_generic_call(PyUFuncObject *ufunc, PyObject *args, PyObject *kwds)
     if (make_full_arg_tuple(&full_args, ufunc->nin, ufunc->nout, args, kwds) < 0) {
         goto fail;
     }
-    _find_array_wrap(full_args, kwds, wraparr, ufunc->nin, ufunc->nout);
+    if (_find_array_wrap(full_args, kwds, wraparr, ufunc->nin, ufunc->nout) < 0) {
+        goto fail;
+    }
 
     /* wrap outputs */
     for (i = 0; i < ufunc->nout; i++) {
@@ -4766,6 +4745,9 @@ ufunc_generic_call(PyUFuncObject *ufunc, PyObject *args, PyObject *kwds)
         wrapped = _apply_array_wrap(wraparr[i], mps[j], &context);
         mps[j] = NULL;  /* Prevent fail double-freeing this */
         if (wrapped == NULL) {
+            for (j = 0; j < i; j++) {
+                Py_DECREF(retobj[j]);
+            }
             goto fail;
         }
 
@@ -4810,8 +4792,11 @@ ufunc_geterr(PyObject *NPY_UNUSED(dummy), PyObject *args)
     if (thedict == NULL) {
         thedict = PyEval_GetBuiltins();
     }
-    res = PyDict_GetItem(thedict, npy_um_str_pyvals_name);
-    if (res != NULL) {
+    res = PyDict_GetItemWithError(thedict, npy_um_str_pyvals_name);
+    if (res == NULL && PyErr_Occurred()) {
+        return NULL;
+    }
+    else if (res != NULL) {
         Py_INCREF(res);
         return res;
     }
@@ -4863,7 +4848,7 @@ ufunc_seterr(PyObject *NPY_UNUSED(dummy), PyObject *args)
 NPY_NO_EXPORT int
 PyUFunc_ReplaceLoopBySignature(PyUFuncObject *func,
                                PyUFuncGenericFunction newfunc,
-                               int *signature,
+                               const int *signature,
                                PyUFuncGenericFunction *oldfunc)
 {
     int i, j;
@@ -4918,7 +4903,7 @@ PyUFunc_FromFuncAndDataAndSignatureAndIdentity(PyUFuncGenericFunction *func, voi
                                      char *types, int ntypes,
                                      int nin, int nout, int identity,
                                      const char *name, const char *doc,
-                                     int unused, const char *signature,
+                                     const int unused, const char *signature,
                                      PyObject *identity_value)
 {
     PyUFuncObject *ufunc;
@@ -5007,6 +4992,16 @@ PyUFunc_FromFuncAndDataAndSignatureAndIdentity(PyUFuncGenericFunction *func, voi
 NPY_NO_EXPORT int
 PyUFunc_SetUsesArraysAsData(void **data, size_t i)
 {
+    /* NumPy 1.19, 2020-01-24 */
+    if (DEPRECATE(
+            "PyUFunc_SetUsesArraysAsData() C-API function is deprecated "
+            "and expected to be removed rapidly. If you are using it (i.e. see "
+            "this warning/error), please notify the NumPy developers. "
+            "It is currently assumed that this function is simply unused and "
+            "its removal will facilitate the implementation of better "
+            "approaches.") < 0) {
+        return -1;
+    }
     data[i] = (void*)PyUFunc_SetUsesArraysAsData;
     return 0;
 }
@@ -5088,21 +5083,12 @@ _free_loop1d_list(PyUFunc_Loop1d *data)
     }
 }
 
-#if PY_VERSION_HEX >= 0x03000000
 static void
 _loop1d_list_free(PyObject *ptr)
 {
     PyUFunc_Loop1d *data = (PyUFunc_Loop1d *)PyCapsule_GetPointer(ptr, NULL);
     _free_loop1d_list(data);
 }
-#else
-static void
-_loop1d_list_free(void *ptr)
-{
-    PyUFunc_Loop1d *data = (PyUFunc_Loop1d *)ptr;
-    _free_loop1d_list(data);
-}
-#endif
 
 
 /*
@@ -5165,8 +5151,11 @@ PyUFunc_RegisterLoopForDescr(PyUFuncObject *ufunc,
         function, arg_typenums, data);
 
     if (result == 0) {
-        cobj = PyDict_GetItem(ufunc->userloops, key);
-        if (cobj == NULL) {
+        cobj = PyDict_GetItemWithError(ufunc->userloops, key);
+        if (cobj == NULL && PyErr_Occurred()) {
+            result = -1;
+        }
+        else if (cobj == NULL) {
             PyErr_SetString(PyExc_KeyError,
                 "userloop for user dtype not found");
             result = -1;
@@ -5220,7 +5209,7 @@ NPY_NO_EXPORT int
 PyUFunc_RegisterLoopForType(PyUFuncObject *ufunc,
                             int usertype,
                             PyUFuncGenericFunction function,
-                            int *arg_types,
+                            const int *arg_types,
                             void *data)
 {
     PyArray_Descr *descr;
@@ -5270,9 +5259,12 @@ PyUFunc_RegisterLoopForType(PyUFuncObject *ufunc,
     funcdata->nargs = 0;
 
     /* Get entry for this user-defined type*/
-    cobj = PyDict_GetItem(ufunc->userloops, key);
+    cobj = PyDict_GetItemWithError(ufunc->userloops, key);
+    if (cobj == NULL && PyErr_Occurred()) {
+        return 0;
+    }
     /* If it's not there, then make one and return. */
-    if (cobj == NULL) {
+    else if (cobj == NULL) {
         cobj = NpyCapsule_FromVoidPtr((void *)funcdata, _loop1d_list_free);
         if (cobj == NULL) {
             goto fail;
@@ -5693,18 +5685,13 @@ ufunc_at(PyUFuncObject *ufunc, PyObject *args)
      * Create dtypes array for either one or two input operands.
      * The output operand is set to the first input operand
      */
-    dtypes[0] = PyArray_DESCR(op1_array);
     operands[0] = op1_array;
     if (op2_array != NULL) {
-        dtypes[1] = PyArray_DESCR(op2_array);
-        dtypes[2] = dtypes[0];
         operands[1] = op2_array;
         operands[2] = op1_array;
         nop = 3;
     }
     else {
-        dtypes[1] = dtypes[0];
-        dtypes[2] = NULL;
         operands[1] = op1_array;
         operands[2] = NULL;
         nop = 2;
@@ -5861,9 +5848,10 @@ ufunc_at(PyUFuncObject *ufunc, PyObject *args)
     Py_XDECREF(op2_array);
     Py_XDECREF(iter);
     Py_XDECREF(iter2);
-    Py_XDECREF(array_operands[0]);
-    Py_XDECREF(array_operands[1]);
-    Py_XDECREF(array_operands[2]);
+    for (i = 0; i < 3; i++) {
+        Py_XDECREF(dtypes[i]);
+        Py_XDECREF(array_operands[i]);
+    }
 
     if (needs_api && PyErr_Occurred()) {
         return NULL;
@@ -5880,9 +5868,10 @@ fail:
     Py_XDECREF(op2_array);
     Py_XDECREF(iter);
     Py_XDECREF(iter2);
-    Py_XDECREF(array_operands[0]);
-    Py_XDECREF(array_operands[1]);
-    Py_XDECREF(array_operands[2]);
+    for (i = 0; i < 3; i++) {
+        Py_XDECREF(dtypes[i]);
+        Py_XDECREF(array_operands[i]);
+    }
 
     return NULL;
 }
@@ -6079,63 +6068,17 @@ static PyGetSetDef ufunc_getset[] = {
  *****************************************************************************/
 
 NPY_NO_EXPORT PyTypeObject PyUFunc_Type = {
-#if defined(NPY_PY3K)
     PyVarObject_HEAD_INIT(NULL, 0)
-#else
-    PyObject_HEAD_INIT(NULL)
-    0,                                          /* ob_size */
-#endif
-    "numpy.ufunc",                              /* tp_name */
-    sizeof(PyUFuncObject),                      /* tp_basicsize */
-    0,                                          /* tp_itemsize */
-    /* methods */
-    (destructor)ufunc_dealloc,                  /* tp_dealloc */
-    0,                                          /* tp_print */
-    0,                                          /* tp_getattr */
-    0,                                          /* tp_setattr */
-#if defined(NPY_PY3K)
-    0,                                          /* tp_reserved */
-#else
-    0,                                          /* tp_compare */
-#endif
-    (reprfunc)ufunc_repr,                       /* tp_repr */
-    0,                                          /* tp_as_number */
-    0,                                          /* tp_as_sequence */
-    0,                                          /* tp_as_mapping */
-    0,                                          /* tp_hash */
-    (ternaryfunc)ufunc_generic_call,            /* tp_call */
-    (reprfunc)ufunc_repr,                       /* tp_str */
-    0,                                          /* tp_getattro */
-    0,                                          /* tp_setattro */
-    0,                                          /* tp_as_buffer */
-    Py_TPFLAGS_DEFAULT | Py_TPFLAGS_HAVE_GC,    /* tp_flags */
-    0,                                          /* tp_doc */
-    (traverseproc)ufunc_traverse,               /* tp_traverse */
-    0,                                          /* tp_clear */
-    0,                                          /* tp_richcompare */
-    0,                                          /* tp_weaklistoffset */
-    0,                                          /* tp_iter */
-    0,                                          /* tp_iternext */
-    ufunc_methods,                              /* tp_methods */
-    0,                                          /* tp_members */
-    ufunc_getset,                               /* tp_getset */
-    0,                                          /* tp_base */
-    0,                                          /* tp_dict */
-    0,                                          /* tp_descr_get */
-    0,                                          /* tp_descr_set */
-    0,                                          /* tp_dictoffset */
-    0,                                          /* tp_init */
-    0,                                          /* tp_alloc */
-    0,                                          /* tp_new */
-    0,                                          /* tp_free */
-    0,                                          /* tp_is_gc */
-    0,                                          /* tp_bases */
-    0,                                          /* tp_mro */
-    0,                                          /* tp_cache */
-    0,                                          /* tp_subclasses */
-    0,                                          /* tp_weaklist */
-    0,                                          /* tp_del */
-    0,                                          /* tp_version_tag */
+    .tp_name = "numpy.ufunc",
+    .tp_basicsize = sizeof(PyUFuncObject),
+    .tp_dealloc = (destructor)ufunc_dealloc,
+    .tp_repr = (reprfunc)ufunc_repr,
+    .tp_call = (ternaryfunc)ufunc_generic_call,
+    .tp_str = (reprfunc)ufunc_repr,
+    .tp_flags = Py_TPFLAGS_DEFAULT | Py_TPFLAGS_HAVE_GC,
+    .tp_traverse = (traverseproc)ufunc_traverse,
+    .tp_methods = ufunc_methods,
+    .tp_getset = ufunc_getset,
 };
 
 /* End of code for ufunc objects */

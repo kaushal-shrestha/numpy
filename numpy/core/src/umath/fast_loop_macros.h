@@ -4,8 +4,8 @@
  * These expect to have access to the arguments of a typical ufunc loop,
  *
  *     char **args
- *     npy_intp *dimensions
- *     npy_intp *steps
+ *     npy_intp const *dimensions
+ *     npy_intp const *steps
  */
 #ifndef _NPY_UMATH_FAST_LOOP_MACROS_H_
 #define _NPY_UMATH_FAST_LOOP_MACROS_H_
@@ -57,6 +57,14 @@
     npy_intp n = dimensions[0];\
     npy_intp i;\
     for(i = 0; i < n; i++, ip1 += is1, ip2 += is2, op1 += os1, op2 += os2)
+
+/** (ip1, ip2, ip3) -> (op1) */
+#define TERNARY_LOOP\
+    char *ip1 = args[0], *ip2 = args[1], *ip3 = args[2], *op1 = args[3];\
+    npy_intp is1 = steps[0], is2 = steps[1], is3 = steps[2], os1 = steps[3];\
+    npy_intp n = dimensions[0];\
+    npy_intp i;\
+    for(i = 0; i < n; i++, ip1 += is1, ip2 += is2, ip3 += is3, op1 += os1)
 
 /** @} */
 

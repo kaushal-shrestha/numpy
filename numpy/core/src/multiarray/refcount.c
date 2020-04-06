@@ -11,6 +11,7 @@
 #define _MULTIARRAYMODULE
 #include "numpy/arrayobject.h"
 #include "numpy/arrayscalars.h"
+#include "iterators.h"
 
 #include "npy_config.h"
 
@@ -45,7 +46,7 @@ PyArray_Item_INCREF(char *data, PyArray_Descr *descr)
         Py_ssize_t pos = 0;
 
         while (PyDict_Next(descr->fields, &pos, &key, &value)) {
-            if NPY_TITLE_KEY(key, value) {
+            if (NPY_TITLE_KEY(key, value)) {
                 continue;
             }
             if (!PyArg_ParseTuple(value, "Oi|O", &new, &offset,
@@ -107,7 +108,7 @@ PyArray_Item_XDECREF(char *data, PyArray_Descr *descr)
             Py_ssize_t pos = 0;
 
             while (PyDict_Next(descr->fields, &pos, &key, &value)) {
-                if NPY_TITLE_KEY(key, value) {
+                if (NPY_TITLE_KEY(key, value)) {
                     continue;
                 }
                 if (!PyArg_ParseTuple(value, "Oi|O", &new, &offset,
@@ -210,21 +211,22 @@ PyArray_XDECREF(PyArrayObject *mp)
     npy_intp i, n;
     PyObject **data;
     PyObject *temp;
-    PyArrayIterObject *it;
+    /*
+     * statically allocating it allows this function to not modify the
+     * reference count of the array for use during dealloc.
+     * (statically is not necessary as such)
+     */
+    PyArrayIterObject it;
 
     if (!PyDataType_REFCHK(PyArray_DESCR(mp))) {
         return 0;
     }
     if (PyArray_DESCR(mp)->type_num != NPY_OBJECT) {
-        it = (PyArrayIterObject *)PyArray_IterNew((PyObject *)mp);
-        if (it == NULL) {
-            return -1;
+        PyArray_RawIterBaseInit(&it, mp);
+        while(it.index < it.size) {
+            PyArray_Item_XDECREF(it.dataptr, PyArray_DESCR(mp));
+            PyArray_ITER_NEXT(&it);
         }
-        while(it->index < it->size) {
-            PyArray_Item_XDECREF(it->dataptr, PyArray_DESCR(mp));
-            PyArray_ITER_NEXT(it);
-        }
-        Py_DECREF(it);
         return 0;
     }
 
@@ -242,16 +244,12 @@ PyArray_XDECREF(PyArrayObject *mp)
         }
     }
     else { /* handles misaligned data too */
-        it = (PyArrayIterObject *)PyArray_IterNew((PyObject *)mp);
-        if (it == NULL) {
-            return -1;
-        }
-        while(it->index < it->size) {
-            NPY_COPY_PYOBJECT_PTR(&temp, it->dataptr);
+        PyArray_RawIterBaseInit(&it, mp);
+        while(it.index < it.size) {
+            NPY_COPY_PYOBJECT_PTR(&temp, it.dataptr);
             Py_XDECREF(temp);
-            PyArray_ITER_NEXT(it);
+            PyArray_ITER_NEXT(&it);
         }
-        Py_DECREF(it);
     }
     return 0;
 }
@@ -320,7 +318,7 @@ _fillobject(char *optr, PyObject *obj, PyArray_Descr *dtype)
         Py_ssize_t pos = 0;
 
         while (PyDict_Next(dtype->fields, &pos, &key, &value)) {
-            if NPY_TITLE_KEY(key, value) {
+            if (NPY_TITLE_KEY(key, value)) {
                 continue;
             }
             if (!PyArg_ParseTuple(value, "Oi|O", &new, &offset, &title)) {

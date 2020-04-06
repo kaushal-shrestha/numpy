@@ -1,5 +1,3 @@
-from __future__ import division, absolute_import, print_function
-
 import functools
 import sys
 import math
@@ -94,19 +92,20 @@ def ix_(*args):
     out = []
     nd = len(args)
     for k, new in enumerate(args):
-        new = asarray(new)
+        if not isinstance(new, _nx.ndarray):
+            new = asarray(new)
+            if new.size == 0:
+                # Explicitly type empty arrays to avoid float default
+                new = new.astype(_nx.intp)
         if new.ndim != 1:
             raise ValueError("Cross index must be 1 dimensional")
-        if new.size == 0:
-            # Explicitly type empty arrays to avoid float default
-            new = new.astype(_nx.intp)
         if issubdtype(new.dtype, _nx.bool_):
             new, = new.nonzero()
         new = new.reshape((1,)*k + (new.size,) + (1,)*(nd-k-1))
         out.append(new)
     return tuple(out)
 
-class nd_grid(object):
+class nd_grid:
     """
     Construct a multi-dimensional "meshgrid".
 
@@ -298,7 +297,7 @@ class OGridClass(nd_grid):
 ogrid = OGridClass()
 
 
-class AxisConcatenator(object):
+class AxisConcatenator:
     """
     Translates slice objects to concatenation along an axis.
 
@@ -551,7 +550,7 @@ c_ = CClass()
 
 
 @set_module('numpy')
-class ndenumerate(object):
+class ndenumerate:
     """
     Multidimensional index iterator.
 
@@ -598,11 +597,9 @@ class ndenumerate(object):
     def __iter__(self):
         return self
 
-    next = __next__
-
 
 @set_module('numpy')
-class ndindex(object):
+class ndindex:
     """
     An N-dimensional iterator object to index arrays.
 
@@ -666,8 +663,6 @@ class ndindex(object):
         next(self._it)
         return self._it.multi_index
 
-    next = __next__
-
 
 # You can do all this with slice() plus a few special objects,
 # but there's a lot to remember. This version is simpler because
@@ -680,7 +675,7 @@ class ndindex(object):
 #
 #
 
-class IndexExpression(object):
+class IndexExpression:
     """
     A nicer way to build up index tuples for arrays.
 

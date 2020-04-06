@@ -38,6 +38,11 @@ to the maintenance branch, and later will be forward ported to master.
 Finish the Release Note
 -----------------------
 
+.. note:
+
+  This has changed now that we use ``towncrier``. See the instructions for
+  creating the release note in ``doc/release/upcoming_changes/README.rst``.
+
 Fill out the release note ``doc/release/1.14.5-notes.rst`` calling out
 significant changes.
 
@@ -51,7 +56,7 @@ repository::
     $ git checkout maintenance/1.14.x
     $ git pull upstream maintenance/1.14.x
     $ git submodule update
-    $ git clean -xdf > /dev/null
+    $ git clean -xdfq
 
 Edit pavement.py and setup.py as detailed in HOWTO_RELEASE::
 
@@ -60,7 +65,6 @@ Edit pavement.py and setup.py as detailed in HOWTO_RELEASE::
 
 Sanity check::
 
-    $ python runtests.py -m "full"  # NumPy < 1.17 only
     $ python3 runtests.py -m "full"
 
 Push this release directly onto the end of the maintenance branch. This
@@ -78,7 +82,7 @@ Paver is used to build the source releases. It will create the ``release`` and
 ``release/installers`` directories and put the ``*.zip`` and ``*.tar.gz``
 source releases in the latter. ::
 
-    $ cython --version  # check that you have the correct cython version
+    $ python3 -m cython --version  # check for correct cython version
     $ paver sdist  # sdist will do a git clean -xdf, so we omit that
 
 
@@ -139,7 +143,7 @@ environment.
 Generate the README files
 -------------------------
 
-This needs to be done after all installers are present, but before the pavement
+This needs to be done after all installers are downloaded, but before the pavement
 file is updated for continued development::
 
     $ cd ../numpy
@@ -151,7 +155,7 @@ Tag the release
 
 Once the wheels have been built and downloaded without errors, go back to your
 numpy repository in the maintenance branch and tag the ``REL`` commit, signing
-it with your gpg key, and build the source distribution archives::
+it with your gpg key::
 
     $ git tag -s v1.14.5
 
@@ -171,9 +175,22 @@ Reset the maintenance branch into a development state
 -----------------------------------------------------
 
 Add another ``REL`` commit to the numpy maintenance branch, which resets the
-``ISREALEASED`` flag to ``False`` and increments the version counter.::
+``ISREALEASED`` flag to ``False`` and increments the version counter::
 
     $ gvim pavement.py setup.py
+
+Create release notes for next release and edit them to set the version::
+
+    $ cp doc/source/release/template.rst doc/source/release/1.14.6-notes.rst
+    $ gvim doc/source/release/1.14.6-notes.rst
+    $ git add doc/source/release/1.14.6-notes.rst
+
+Add new release notes to the documentation release list::
+
+    $ gvim doc/source/release.rst
+
+Commit the result::
+
     $ git commit -a -m"REL: prepare 1.14.x for further development"
     $ git push upstream maintenance/1.14.x
 
@@ -182,7 +199,9 @@ Upload to PyPI
 --------------
 
 Upload to PyPI using ``twine``. A recent version of ``twine`` of is needed
-after recent PyPI changes, version ``1.11.0`` was used here.::
+after recent PyPI changes, version ``1.11.0`` was used here.
+
+.. code-block:: sh
 
     $ cd ../numpy
     $ twine upload release/installers/*.whl
@@ -212,28 +231,39 @@ add files, using an editable text window and as binary uploads.
 - Hit the ``{Publish,Update} release`` button at the bottom.
 
 
-Upload documents to docs.scipy.org
-----------------------------------
+Upload documents to numpy.org
+-----------------------------
 
 This step is only needed for final releases and can be skipped for
-pre-releases. You will also need upload permission for the document server, if
-you do not have permission ping Pauli Virtanen or Ralf Gommers to generate and
-upload the documentation. Otherwise::
+pre-releases. ``make merge-doc`` clones the ``numpy/doc`` repo into
+``doc/build/merge`` and updates it with the new documentation::
 
     $ pushd doc
     $ make dist
-    $ make upload USERNAME=<yourname> RELEASE=v1.14.5
+    $ make merge-doc
     $ popd
 
-If the release series is a new one, you will need to rebuild and upload the
-``docs.scipy.org`` front page::
+If the release series is a new one, you will need to add a new section to the
+``doc/build/merge/index.html`` front page just after the "insert here" comment::
 
-    $ cd ../docs.scipy.org
-    $ gvim index.rst
+    $ gvim doc/build/merge/index.html +/'insert here'
 
-Note: there is discussion about moving the docs to github. This section will be
-updated when/if that happens.
+Otherwise, only the ``zip`` and ``pdf`` links should be updated with the
+new tag name::
 
+    $ gvim doc/build/merge/index.html +/'tag v1.14'
+
+You can "test run" the new documentation in a browser to make sure the links
+work::
+
+    $ firefox doc/build/merge/index.html
+
+Once everything seems satisfactory, commit and upload the changes::
+
+    $ pushd doc/build/merge
+    $ git commit -am"Add documentation for v1.14.5"
+    $ git push
+    $ popd
 
 Announce the release on scipy.org
 ---------------------------------
@@ -264,6 +294,15 @@ python-announce-list is BCC so that replies will not be sent to that list.
 Post-Release Tasks
 ------------------
 
-Forward port the documentation changes ``doc/release/1.14.5-notes.rst``,
-``doc/changelog/1.14.5-changelog.rst`` and add the release note to
-``doc/source/release.rst``.
+Checkout master and forward port the documentation changes::
+
+    $ git checkout -b update-after-1.14.5-release
+    $ git checkout maintenance/1.14.x doc/source/release/1.14.5-notes.rst
+    $ git checkout maintenance/1.14.x doc/changelog/1.14.5-changelog.rst
+    $ gvim doc/source/release.rst  # Add link to new notes
+    $ git add doc/changelog/1.14.5-changelog.rst doc/source/release/1.14.5-notes.rst
+    $ git status  # check status before commit
+    $ git commit -a -m"REL: Update master after 1.14.5 release."
+    $ git push origin HEAD
+
+Go to github and make a PR.

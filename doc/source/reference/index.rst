@@ -12,7 +12,7 @@ NumPy Reference
 
 This reference manual details functions, modules, and objects
 included in NumPy, describing what they are and what they do.
-For learning how to use NumPy, see also :ref:`user`.
+For learning how to use NumPy, see the :ref:`complete documentation <manual>`.
 
 
 .. toctree::
@@ -24,7 +24,7 @@ For learning how to use NumPy, see also :ref:`user`.
    routines
    distutils
    distutils_guide
-   c-api
+   c-api/index
    internals
    swig
 

@@ -6,11 +6,13 @@ See ``find_function`` for how functions should be formatted, and
 specified.
 
 """
-from __future__ import division, absolute_import, print_function
+from numpy.distutils.conv_template import process_file as process_c_file
 
-import sys, os, re
 import hashlib
-
+import io
+import os
+import re
+import sys
 import textwrap
 
 from os.path import join
@@ -73,7 +75,7 @@ def _repl(str):
     return str.replace('Bool', 'npy_bool')
 
 
-class StealRef(object):
+class StealRef:
     def __init__(self, arg):
         self.arg = arg # counting from 1
 
@@ -84,7 +86,7 @@ class StealRef(object):
             return 'NPY_STEALS_REF_TO_ARG(%d)' % self.arg
 
 
-class NonNull(object):
+class NonNull:
     def __init__(self, arg):
         self.arg = arg # counting from 1
 
@@ -95,7 +97,7 @@ class NonNull(object):
             return 'NPY_GCC_NONNULL(%d)' % self.arg
 
 
-class Function(object):
+class Function:
     def __init__(self, name, return_type, args, doc=''):
         self.name = name
         self.return_type = _repl(return_type)
@@ -215,7 +217,10 @@ def find_functions(filename, tag='API'):
           This function does foo...
          */
     """
-    fo = open(filename, 'r')
+    if filename.endswith(('.c.src', '.h.src')):
+        fo = io.StringIO(process_c_file(filename))
+    else:
+        fo = open(filename, 'r')
     functions = []
     return_type = None
     function_name = None
@@ -259,7 +264,8 @@ def find_functions(filename, tag='API'):
             elif state == STATE_ARGS:
                 if line.startswith('{'):
                     # finished
-                    fargs_str = ' '.join(function_args).rstrip(' )')
+                    # remove any white space and the closing bracket:
+                    fargs_str = ' '.join(function_args).rstrip()[:-1].rstrip()
                     fargs = split_arguments(fargs_str)
                     f = Function(function_name, return_type, fargs,
                                  '\n'.join(doclist))
@@ -302,7 +308,7 @@ def write_file(filename, data):
 
 
 # Those *Api classes instances know how to output strings for the generated code
-class TypeApi(object):
+class TypeApi:
     def __init__(self, name, index, ptr_cast, api_name):
         self.index = index
         self.name = name
@@ -324,7 +330,7 @@ extern NPY_NO_EXPORT PyTypeObject %(type)s;
 """ % {'type': self.name}
         return astr
 
-class GlobalVarApi(object):
+class GlobalVarApi:
     def __init__(self, name, index, type, api_name):
         self.name = name
         self.index = index
@@ -348,7 +354,7 @@ extern NPY_NO_EXPORT %(type)s %(name)s;
 
 # Dummy to be able to consistently use *Api instances for all items in the
 # array api
-class BoolValuesApi(object):
+class BoolValuesApi:
     def __init__(self, name, index, api_name):
         self.name = name
         self.index = index
@@ -370,7 +376,7 @@ extern NPY_NO_EXPORT PyBoolScalarObject _PyArrayScalar_BoolValues[2];
 """
         return astr
 
-class FunctionApi(object):
+class FunctionApi:
     def __init__(self, name, index, annotations, return_type, args, api_name):
         self.name = name
         self.index = index
@@ -483,14 +489,11 @@ def get_versions_hash():
     d = []
 
     file = os.path.join(os.path.dirname(__file__), 'cversions.txt')
-    fid = open(file, 'r')
-    try:
+    with open(file, 'r') as fid:
         for line in fid:
             m = VERRE.match(line)
             if m:
                 d.append((int(m.group(1), 16), m.group(2)))
-    finally:
-        fid.close()
 
     return dict(d)
 

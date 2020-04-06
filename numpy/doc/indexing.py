@@ -1,4 +1,5 @@
-"""==============
+"""
+==============
 Array indexing
 ==============
 
@@ -107,7 +108,7 @@ arrays and thus greatly improve performance.
 
 It is possible to use special features to effectively increase the
 number of dimensions in an array through indexing so the resulting
-array aquires the shape needed for use in an expression or with a
+array acquires the shape needed for use in an expression or with a
 specific function.
 
 Index arrays
@@ -295,6 +296,13 @@ to produce a resultant array of shape (3,2).
 
 Likewise, slicing can be combined with broadcasted boolean indices: ::
 
+ >>> b = y > 20
+ >>> b
+ array([[False, False, False, False, False, False, False],
+       [False, False, False, False, False, False, False],
+       [False, False, False, False, False, False, False],
+       [ True,  True,  True,  True,  True,  True,  True],
+       [ True,  True,  True,  True,  True,  True,  True]])
  >>> y[b[:,5],1:3]
  array([[22, 23],
         [29, 30]])
@@ -364,8 +372,7 @@ exceptions (assigning complex to floats or ints): ::
  >>> x[1]
  1
  >>> x[1] = 1.2j
- <type 'exceptions.TypeError'>: can't convert complex to long; use
- long(abs(z))
+ TypeError: can't convert complex to int
 
 
 Unlike some of the references (such as array and mask indices)
@@ -438,4 +445,3 @@ converted to an array as a list would be. As an example: ::
  40
 
 """
-from __future__ import division, absolute_import, print_function

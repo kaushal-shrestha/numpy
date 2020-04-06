@@ -1,32 +1,14 @@
-from __future__ import division, absolute_import, print_function
+"""
+Contains the core of NumPy: ndarray, ufuncs, dtypes, etc.
 
-from .info import __doc__
+Please note that this module is private.  All functions and objects
+are available in the main ``numpy`` namespace - use that instead.
+
+"""
+
 from numpy.version import version as __version__
 
 import os
-
-# on Windows NumPy loads an important OpenBLAS-related DLL
-# and the code below aims to alleviate issues with DLL
-# path resolution portability with an absolute path DLL load
-if os.name == 'nt':
-    from ctypes import WinDLL
-    import glob
-    # convention for storing / loading the DLL from
-    # numpy/.libs/, if present
-    libs_path = os.path.abspath(os.path.join(os.path.dirname(__file__),
-                                             '..', '.libs'))
-    DLL_filenames = []
-    if os.path.isdir(libs_path):
-        for filename in glob.glob(os.path.join(libs_path, '*openblas*dll')):
-            # NOTE: would it change behavior to load ALL
-            # DLLs at this path vs. the name restriction?
-            WinDLL(os.path.abspath(filename))
-            DLL_filenames.append(filename)
-    if len(DLL_filenames) > 1:
-        import warnings
-        warnings.warn("loaded more than 1 DLL from .libs:\n%s" %
-                      "\n".join(DLL_filenames),
-                      stacklevel=1)
 
 # disables OpenBLAS affinity setting of the main thread that limits
 # python threads or processes to one core
@@ -153,16 +135,11 @@ def _ufunc_reduce(func):
     return _ufunc_reconstruct, (whichmodule(func, name), name)
 
 
-import sys
-if sys.version_info[0] >= 3:
-    import copyreg
-else:
-    import copy_reg as copyreg
+import copyreg
 
 copyreg.pickle(ufunc, _ufunc_reduce, _ufunc_reconstruct)
 # Unclutter namespace (must keep _ufunc_reconstruct for unpickling)
 del copyreg
-del sys
 del _ufunc_reduce
 
 from numpy._pytesttester import PytestTester

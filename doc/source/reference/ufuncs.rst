@@ -100,7 +100,7 @@ is true:
    - *d* acts like a (5,6) array where the single value is repeated.
 
 
-.. _ufuncs.output-type:
+.. _ufuncs-output-type:
 
 Output type determination
 =========================
@@ -118,7 +118,7 @@ all output arrays will be passed to the :obj:`~class.__array_prepare__` and
 the highest :obj:`~class.__array_priority__` of any other input to the
 universal function. The default :obj:`~class.__array_priority__` of the
 ndarray is 0.0, and the default :obj:`~class.__array_priority__` of a subtype
-is 1.0. Matrices have :obj:`~class.__array_priority__` equal to 10.0.
+is 0.0. Matrices have :obj:`~class.__array_priority__` equal to 10.0.
 
 All ufuncs can also take output arguments. If necessary, output will
 be cast to the data-type(s) of the provided output array(s). If a class
@@ -228,46 +228,47 @@ can generate this table for your system with the code given in the Figure.
 
 .. admonition:: Figure
 
-    Code segment showing the "can cast safely" table for a 32-bit system.
+    Code segment showing the "can cast safely" table for a 64-bit system.
+    Generally the output depends on the system; your system might result in
+    a different table.
 
+    >>> mark = {False: ' -', True: ' Y'}
     >>> def print_table(ntypes):
-    ...     print 'X',
-    ...     for char in ntypes: print char,
-    ...     print
+    ...     print('X ' + ' '.join(ntypes))
     ...     for row in ntypes:
-    ...         print row,
+    ...         print(row, end='')
     ...         for col in ntypes:
-    ...             print int(np.can_cast(row, col)),
-    ...         print
+    ...             print(mark[np.can_cast(row, col)], end='')
+    ...         print()
+    ...
     >>> print_table(np.typecodes['All'])
     X ? b h i l q p B H I L Q P e f d g F D G S U V O M m
-    ? 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1
-    b 0 1 1 1 1 1 1 0 0 0 0 0 0 1 1 1 1 1 1 1 1 1 1 1 0 0
-    h 0 0 1 1 1 1 1 0 0 0 0 0 0 0 1 1 1 1 1 1 1 1 1 1 0 0
-    i 0 0 0 1 1 1 1 0 0 0 0 0 0 0 0 1 1 0 1 1 1 1 1 1 0 0
-    l 0 0 0 0 1 1 1 0 0 0 0 0 0 0 0 1 1 0 1 1 1 1 1 1 0 0
-    q 0 0 0 0 1 1 1 0 0 0 0 0 0 0 0 1 1 0 1 1 1 1 1 1 0 0
-    p 0 0 0 0 1 1 1 0 0 0 0 0 0 0 0 1 1 0 1 1 1 1 1 1 0 0
-    B 0 0 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 0 0
-    H 0 0 0 1 1 1 1 0 1 1 1 1 1 0 1 1 1 1 1 1 1 1 1 1 0 0
-    I 0 0 0 0 1 1 1 0 0 1 1 1 1 0 0 1 1 0 1 1 1 1 1 1 0 0
-    L 0 0 0 0 0 0 0 0 0 0 1 1 1 0 0 1 1 0 1 1 1 1 1 1 0 0
-    Q 0 0 0 0 0 0 0 0 0 0 1 1 1 0 0 1 1 0 1 1 1 1 1 1 0 0
-    P 0 0 0 0 0 0 0 0 0 0 1 1 1 0 0 1 1 0 1 1 1 1 1 1 0 0
-    e 0 0 0 0 0 0 0 0 0 0 0 0 0 1 1 1 1 1 1 1 1 1 1 1 0 0
-    f 0 0 0 0 0 0 0 0 0 0 0 0 0 0 1 1 1 1 1 1 1 1 1 1 0 0
-    d 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 1 1 0 1 1 1 1 1 1 0 0
-    g 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 1 0 0 1 1 1 1 1 0 0
-    F 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 1 1 1 1 1 1 1 0 0
-    D 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 1 1 1 1 1 1 0 0
-    G 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 1 1 1 1 1 0 0
-    S 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 1 1 1 1 0 0
-    U 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 1 1 1 0 0
-    V 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 1 1 0 0
-    O 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 1 1 0 0
-    M 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 1 0
-    m 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 1
-
+    ? Y Y Y Y Y Y Y Y Y Y Y Y Y Y Y Y Y Y Y Y Y Y Y Y - Y
+    b - Y Y Y Y Y Y - - - - - - Y Y Y Y Y Y Y Y Y Y Y - Y
+    h - - Y Y Y Y Y - - - - - - - Y Y Y Y Y Y Y Y Y Y - Y
+    i - - - Y Y Y Y - - - - - - - - Y Y - Y Y Y Y Y Y - Y
+    l - - - - Y Y Y - - - - - - - - Y Y - Y Y Y Y Y Y - Y
+    q - - - - Y Y Y - - - - - - - - Y Y - Y Y Y Y Y Y - Y
+    p - - - - Y Y Y - - - - - - - - Y Y - Y Y Y Y Y Y - Y
+    B - - Y Y Y Y Y Y Y Y Y Y Y Y Y Y Y Y Y Y Y Y Y Y - Y
+    H - - - Y Y Y Y - Y Y Y Y Y - Y Y Y Y Y Y Y Y Y Y - Y
+    I - - - - Y Y Y - - Y Y Y Y - - Y Y - Y Y Y Y Y Y - Y
+    L - - - - - - - - - - Y Y Y - - Y Y - Y Y Y Y Y Y - -
+    Q - - - - - - - - - - Y Y Y - - Y Y - Y Y Y Y Y Y - -
+    P - - - - - - - - - - Y Y Y - - Y Y - Y Y Y Y Y Y - -
+    e - - - - - - - - - - - - - Y Y Y Y Y Y Y Y Y Y Y - -
+    f - - - - - - - - - - - - - - Y Y Y Y Y Y Y Y Y Y - -
+    d - - - - - - - - - - - - - - - Y Y - Y Y Y Y Y Y - -
+    g - - - - - - - - - - - - - - - - Y - - Y Y Y Y Y - -
+    F - - - - - - - - - - - - - - - - - Y Y Y Y Y Y Y - -
+    D - - - - - - - - - - - - - - - - - - Y Y Y Y Y Y - -
+    G - - - - - - - - - - - - - - - - - - - Y Y Y Y Y - -
+    S - - - - - - - - - - - - - - - - - - - - Y Y Y Y - -
+    U - - - - - - - - - - - - - - - - - - - - - Y Y Y - -
+    V - - - - - - - - - - - - - - - - - - - - - - Y Y - -
+    O - - - - - - - - - - - - - - - - - - - - - - Y Y - -
+    M - - - - - - - - - - - - - - - - - - - - - - Y Y Y -
+    m - - - - - - - - - - - - - - - - - - - - - - Y Y - Y
 
 You should note that, while included in the table for completeness,
 the 'S', 'U', and 'V' types cannot be operated on by ufuncs. Also,
@@ -319,7 +320,7 @@ advanced usage and will not typically be used.
     .. versionadded:: 1.10
 
     The 'out' keyword argument is expected to be a tuple with one entry per
-    output (which can be `None` for arrays to be allocated by the ufunc).
+    output (which can be None for arrays to be allocated by the ufunc).
     For ufuncs with a single output, passing a single array (instead of a
     tuple holding a single array) is also valid.
 
@@ -440,13 +441,13 @@ advanced usage and will not typically be used.
 
 *extobj*
 
-    a list of length 1, 2, or 3 specifying the ufunc buffer-size, the
-    error mode integer, and the error call-back function. Normally, these
+    a list of length 3 specifying the ufunc buffer-size, the error
+    mode integer, and the error call-back function. Normally, these
     values are looked up in a thread-specific dictionary. Passing them
     here circumvents that look up and uses the low-level specification
-    provided for the error mode. This may be useful, for example, as an
-    optimization for calculations requiring many ufunc calls on small arrays
-    in a loop.
+    provided for the error mode. This may be useful, for example, as
+    an optimization for calculations requiring many ufunc calls on
+    small arrays in a loop.
 
 
 
@@ -493,7 +494,7 @@ keyword, and an *out* keyword, and the arrays must all have dimension >= 1.
 The *axis* keyword specifies the axis of the array over which the reduction
 will take place (with negative values counting backwards). Generally, it is an
 integer, though for :meth:`ufunc.reduce`, it can also be a tuple of `int` to
-reduce over several axes at once, or `None`, to reduce over all axes.
+reduce over several axes at once, or None, to reduce over all axes.
 The *dtype* keyword allows you to manage a very common problem that arises
 when naively using :meth:`ufunc.reduce`. Sometimes you may
 have an array of a certain data type and wish to add up all of its
@@ -568,6 +569,7 @@ Math operations
     add
     subtract
     multiply
+    matmul
     divide
     logaddexp
     logaddexp2
@@ -576,6 +578,7 @@ Math operations
     negative
     positive
     power
+    float_power
     remainder
     mod
     fmod
@@ -634,6 +637,8 @@ The ratio of degrees to radians is :math:`180^{\circ}/\pi.`
     arcsinh
     arccosh
     arctanh
+    degrees
+    radians
     deg2rad
     rad2deg
 

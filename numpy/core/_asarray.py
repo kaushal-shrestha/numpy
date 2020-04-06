@@ -3,8 +3,6 @@ Functions in the ``as*array`` family that promote array-likes into arrays.
 
 `require` fits this category despite its name not matching this pattern.
 """
-from __future__ import division, absolute_import, print_function
-
 from .overrides import set_module
 from .multiarray import array
 
@@ -245,6 +243,11 @@ def require(a, dtype=None, requirements=None):
        * 'WRITEABLE' ('W')    - ensure a writable array
        * 'OWNDATA' ('O')      - ensure an array that owns its own data
        * 'ENSUREARRAY', ('E') - ensure a base array, instead of a subclass
+
+    Returns
+    -------
+    out : ndarray
+        Array with specified requirements and type if given.
 
     See Also
     --------

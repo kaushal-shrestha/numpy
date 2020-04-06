@@ -1,5 +1,3 @@
-from __future__ import division, print_function
-
 import os
 import re
 import struct
@@ -21,16 +19,16 @@ ReorderableNone = "(Py_INCREF(Py_None), Py_None)"
 
 # Sentinel value to specify using the full type description in the
 # function name
-class FullTypeDescr(object):
+class FullTypeDescr:
     pass
 
-class FuncNameSuffix(object):
+class FuncNameSuffix:
     """Stores the suffix to append when generating functions names.
     """
     def __init__(self, suffix):
         self.suffix = suffix
 
-class TypeDescription(object):
+class TypeDescription:
     """Type signature for a ufunc.
 
     Attributes
@@ -120,7 +118,7 @@ def TD(types, f=None, astype=None, in_=None, out=None, simd=None):
         tds.append(TypeDescription(t, f=fd, in_=i, out=o, astype=astype, simd=simdt))
     return tds
 
-class Ufunc(object):
+class Ufunc:
     """Description of a ufunc.
 
     Attributes
@@ -132,7 +130,7 @@ class Ufunc(object):
     type_descriptions : list of TypeDescription objects
     """
     def __init__(self, nin, nout, identity, docstring, typereso,
-                 *type_descriptions, **kwargs):
+                 *type_descriptions, signature=None):
         self.nin = nin
         self.nout = nout
         if identity is None:
@@ -141,23 +139,17 @@ class Ufunc(object):
         self.docstring = docstring
         self.typereso = typereso
         self.type_descriptions = []
-        self.signature = kwargs.pop('signature', None)
+        self.signature = signature
         for td in type_descriptions:
             self.type_descriptions.extend(td)
         for td in self.type_descriptions:
             td.finish_signature(self.nin, self.nout)
-        if kwargs:
-            raise ValueError('unknown kwargs %r' % str(kwargs))
 
 # String-handling utilities to avoid locale-dependence.
 
 import string
-if sys.version_info[0] < 3:
-    UPPER_TABLE = string.maketrans(string.ascii_lowercase,
-                                   string.ascii_uppercase)
-else:
-    UPPER_TABLE = bytes.maketrans(bytes(string.ascii_lowercase, "ascii"),
-                                  bytes(string.ascii_uppercase, "ascii"))
+UPPER_TABLE = bytes.maketrans(bytes(string.ascii_lowercase, "ascii"),
+                              bytes(string.ascii_uppercase, "ascii"))
 
 def english_upper(s):
     """ Apply English case rules to convert ASCII strings to all upper case.
@@ -226,7 +218,9 @@ chartoname = {
     'P': 'OBJECT',
 }
 
-all = '?bBhHiIlLqQefdgFDGOMm'
+noobj = '?bBhHiIlLqQefdgFDGmM'
+all = '?bBhHiIlLqQefdgFDGOmM'
+
 O = 'O'
 P = 'P'
 ints = 'bBhHiIlLqQ'
@@ -239,6 +233,7 @@ flts = 'efdg'
 fltsO = flts + O
 fltsP = flts + P
 cmplx = 'FDG'
+cmplxvec = 'FD'
 cmplxO = cmplx + O
 cmplxP = cmplx + P
 inexact = flts + cmplx
@@ -246,10 +241,8 @@ inexactvec = 'fd'
 noint = inexact+O
 nointP = inexact+P
 allP = bints+times+flts+cmplxP
-nobool = all[1:]
-noobj = all[:-3]+all[-2:]
-nobool_or_obj = all[1:-3]+all[-2:]
-nobool_or_datetime = all[1:-2]+all[-1:]
+nobool_or_obj = noobj[1:]
+nobool_or_datetime = noobj[1:-1] + O # includes m - timedelta64
 intflt = ints+flts
 intfltcmplx = ints+flts+cmplx
 nocmplx = bints+times+flts
@@ -276,7 +269,7 @@ defdict = {
     Ufunc(2, 1, Zero,
           docstrings.get('numpy.core.umath.add'),
           'PyUFunc_AdditionTypeResolver',
-          TD(notimes_or_obj, simd=[('avx2', ints)]),
+          TD(notimes_or_obj, simd=[('avx512f', cmplxvec),('avx2', ints)]),
           [TypeDescription('M', FullTypeDescr, 'Mm', 'M'),
            TypeDescription('m', FullTypeDescr, 'mm', 'm'),
            TypeDescription('M', FullTypeDescr, 'mM', 'M'),
@@ -287,7 +280,7 @@ defdict = {
     Ufunc(2, 1, None, # Zero is only a unit to the right, not the left
           docstrings.get('numpy.core.umath.subtract'),
           'PyUFunc_SubtractionTypeResolver',
-          TD(notimes_or_obj, simd=[('avx2', ints)]),
+          TD(ints + inexact, simd=[('avx512f', cmplxvec),('avx2', ints)]),
           [TypeDescription('M', FullTypeDescr, 'Mm', 'M'),
            TypeDescription('m', FullTypeDescr, 'mm', 'm'),
            TypeDescription('M', FullTypeDescr, 'MM', 'm'),
@@ -298,7 +291,7 @@ defdict = {
     Ufunc(2, 1, One,
           docstrings.get('numpy.core.umath.multiply'),
           'PyUFunc_MultiplicationTypeResolver',
-          TD(notimes_or_obj, simd=[('avx2', ints)]),
+          TD(notimes_or_obj, simd=[('avx512f', cmplxvec),('avx2', ints)]),
           [TypeDescription('m', FullTypeDescr, 'mq', 'm'),
            TypeDescription('m', FullTypeDescr, 'qm', 'm'),
            TypeDescription('m', FullTypeDescr, 'md', 'm'),
@@ -306,17 +299,7 @@ defdict = {
           ],
           TD(O, f='PyNumber_Multiply'),
           ),
-'divide':
-    Ufunc(2, 1, None, # One is only a unit to the right, not the left
-          docstrings.get('numpy.core.umath.divide'),
-          'PyUFunc_MixedDivisionTypeResolver',
-          TD(intfltcmplx),
-          [TypeDescription('m', FullTypeDescr, 'mq', 'm'),
-           TypeDescription('m', FullTypeDescr, 'md', 'm'),
-           TypeDescription('m', FullTypeDescr, 'mm', 'd'),
-          ],
-          TD(O, f='PyNumber_Divide'),
-          ),
+#'divide' : aliased to true_divide in umathmodule.c:initumath
 'floor_divide':
     Ufunc(2, 1, None, # One is only a unit to the right, not the left
           docstrings.get('numpy.core.umath.floor_divide'),
@@ -343,7 +326,7 @@ defdict = {
     Ufunc(1, 1, None,
           docstrings.get('numpy.core.umath.conjugate'),
           None,
-          TD(ints+flts+cmplx, simd=[('avx2', ints)]),
+          TD(ints+flts+cmplx, simd=[('avx2', ints), ('avx512f', cmplxvec)]),
           TD(P, f='conjugate'),
           ),
 'fmod':
@@ -358,14 +341,14 @@ defdict = {
     Ufunc(1, 1, None,
           docstrings.get('numpy.core.umath.square'),
           None,
-          TD(ints+inexact, simd=[('avx2', ints)]),
+          TD(ints+inexact, simd=[('avx2', ints), ('fma', 'fd'), ('avx512f', 'FDfd')]),
           TD(O, f='Py_square'),
           ),
 'reciprocal':
     Ufunc(1, 1, None,
           docstrings.get('numpy.core.umath.reciprocal'),
           None,
-          TD(ints+inexact, simd=[('avx2', ints)]),
+          TD(ints+inexact, simd=[('avx2', ints), ('fma', 'fd'), ('avx512f','fd')]),
           TD(O, f='Py_reciprocal'),
           ),
 # This is no longer used as numpy.ones_like, however it is
@@ -395,8 +378,8 @@ defdict = {
     Ufunc(1, 1, None,
           docstrings.get('numpy.core.umath.absolute'),
           'PyUFunc_AbsoluteTypeResolver',
-          TD(bints+flts+timedeltaonly),
-          TD(cmplx, out=('f', 'd', 'g')),
+          TD(bints+flts+timedeltaonly, simd=[('fma', 'fd'), ('avx512f', 'fd')]),
+          TD(cmplx, simd=[('avx512f', cmplxvec)], out=('f', 'd', 'g')),
           TD(O, f='PyNumber_Absolute'),
           ),
 '_arg':
@@ -409,7 +392,7 @@ defdict = {
     Ufunc(1, 1, None,
           docstrings.get('numpy.core.umath.negative'),
           'PyUFunc_NegativeTypeResolver',
-          TD(bints+flts+timedeltaonly, simd=[('avx2', ints)]),
+          TD(ints+flts+timedeltaonly, simd=[('avx2', ints)]),
           TD(cmplx, f='neg'),
           TD(O, f='PyNumber_Negative'),
           ),
@@ -433,6 +416,7 @@ defdict = {
           'PyUFunc_SimpleBinaryComparisonTypeResolver',
           TD(all, out='?', simd=[('avx2', ints)]),
           [TypeDescription('O', FullTypeDescr, 'OO', 'O')],
+          TD('O', out='?'),
           ),
 'greater_equal':
     Ufunc(2, 1, None,
@@ -440,6 +424,7 @@ defdict = {
           'PyUFunc_SimpleBinaryComparisonTypeResolver',
           TD(all, out='?', simd=[('avx2', ints)]),
           [TypeDescription('O', FullTypeDescr, 'OO', 'O')],
+          TD('O', out='?'),
           ),
 'less':
     Ufunc(2, 1, None,
@@ -447,6 +432,7 @@ defdict = {
           'PyUFunc_SimpleBinaryComparisonTypeResolver',
           TD(all, out='?', simd=[('avx2', ints)]),
           [TypeDescription('O', FullTypeDescr, 'OO', 'O')],
+          TD('O', out='?'),
           ),
 'less_equal':
     Ufunc(2, 1, None,
@@ -454,6 +440,7 @@ defdict = {
           'PyUFunc_SimpleBinaryComparisonTypeResolver',
           TD(all, out='?', simd=[('avx2', ints)]),
           [TypeDescription('O', FullTypeDescr, 'OO', 'O')],
+          TD('O', out='?'),
           ),
 'equal':
     Ufunc(2, 1, None,
@@ -461,6 +448,7 @@ defdict = {
           'PyUFunc_SimpleBinaryComparisonTypeResolver',
           TD(all, out='?', simd=[('avx2', ints)]),
           [TypeDescription('O', FullTypeDescr, 'OO', 'O')],
+          TD('O', out='?'),
           ),
 'not_equal':
     Ufunc(2, 1, None,
@@ -468,6 +456,7 @@ defdict = {
           'PyUFunc_SimpleBinaryComparisonTypeResolver',
           TD(all, out='?', simd=[('avx2', ints)]),
           [TypeDescription('O', FullTypeDescr, 'OO', 'O')],
+          TD('O', out='?'),
           ),
 'logical_and':
     Ufunc(2, 1, True_,
@@ -475,6 +464,7 @@ defdict = {
           'PyUFunc_SimpleBinaryComparisonTypeResolver',
           TD(nodatetime_or_obj, out='?', simd=[('avx2', ints)]),
           TD(O, f='npy_ObjectLogicalAnd'),
+          TD(O, f='npy_ObjectLogicalAnd', out='?'),
           ),
 'logical_not':
     Ufunc(1, 1, None,
@@ -482,6 +472,7 @@ defdict = {
           None,
           TD(nodatetime_or_obj, out='?', simd=[('avx2', ints)]),
           TD(O, f='npy_ObjectLogicalNot'),
+          TD(O, f='npy_ObjectLogicalNot', out='?'),
           ),
 'logical_or':
     Ufunc(2, 1, False_,
@@ -489,6 +480,7 @@ defdict = {
           'PyUFunc_SimpleBinaryComparisonTypeResolver',
           TD(nodatetime_or_obj, out='?', simd=[('avx2', ints)]),
           TD(O, f='npy_ObjectLogicalOr'),
+          TD(O, f='npy_ObjectLogicalOr', out='?'),
           ),
 'logical_xor':
     Ufunc(2, 1, False_,
@@ -501,15 +493,22 @@ defdict = {
     Ufunc(2, 1, ReorderableNone,
           docstrings.get('numpy.core.umath.maximum'),
           'PyUFunc_SimpleUniformOperationTypeResolver',
-          TD(noobj),
+          TD(noobj, simd=[('avx512f', 'fd')]),
           TD(O, f='npy_ObjectMax')
           ),
 'minimum':
     Ufunc(2, 1, ReorderableNone,
           docstrings.get('numpy.core.umath.minimum'),
           'PyUFunc_SimpleUniformOperationTypeResolver',
-          TD(noobj),
+          TD(noobj, simd=[('avx512f', 'fd')]),
           TD(O, f='npy_ObjectMin')
+          ),
+'clip':
+    Ufunc(3, 1, ReorderableNone,
+          docstrings.get('numpy.core.umath.clip'),
+          'PyUFunc_SimpleUniformOperationTypeResolver',
+          TD(noobj),
+          [TypeDescription('O', 'npy_ObjectClip', 'OOO', 'O')]
           ),
 'fmax':
     Ufunc(2, 1, ReorderableNone,
@@ -655,14 +654,18 @@ defdict = {
     Ufunc(1, 1, None,
           docstrings.get('numpy.core.umath.cos'),
           None,
-          TD(inexact, f='cos', astype={'e':'f'}),
+          TD('e', f='cos', astype={'e':'f'}),
+          TD('f', simd=[('fma', 'f'), ('avx512f', 'f')]),
+          TD('fdg' + cmplx, f='cos'),
           TD(P, f='cos'),
           ),
 'sin':
     Ufunc(1, 1, None,
           docstrings.get('numpy.core.umath.sin'),
           None,
-          TD(inexact, f='sin', astype={'e':'f'}),
+          TD('e', f='sin', astype={'e':'f'}),
+          TD('f', simd=[('fma', 'f'), ('avx512f', 'f')]),
+          TD('fdg' + cmplx, f='sin'),
           TD(P, f='sin'),
           ),
 'tan':
@@ -697,8 +700,9 @@ defdict = {
     Ufunc(1, 1, None,
           docstrings.get('numpy.core.umath.exp'),
           None,
-          TD('f', simd=[('avx2', 'f'), ('avx512f', 'f')]),
-          TD(inexact, f='exp', astype={'e':'f'}),
+          TD('e', f='exp', astype={'e':'f'}),
+          TD('f', simd=[('fma', 'f'), ('avx512f', 'f')]),
+          TD('fdg' + cmplx, f='exp'),
           TD(P, f='exp'),
           ),
 'exp2':
@@ -719,8 +723,9 @@ defdict = {
     Ufunc(1, 1, None,
           docstrings.get('numpy.core.umath.log'),
           None,
-          TD('f', simd=[('avx2', 'f'), ('avx512f', 'f')]),
-          TD(inexact, f='log', astype={'e':'f'}),
+          TD('e', f='log', astype={'e':'f'}),
+          TD('f', simd=[('fma', 'f'), ('avx512f', 'f')]),
+          TD('fdg' + cmplx, f='log'),
           TD(P, f='log'),
           ),
 'log2':
@@ -749,8 +754,8 @@ defdict = {
           docstrings.get('numpy.core.umath.sqrt'),
           None,
           TD('e', f='sqrt', astype={'e':'f'}),
-          TD(inexactvec),
-          TD(inexact, f='sqrt', astype={'e':'f'}),
+          TD(inexactvec, simd=[('fma', 'fd'), ('avx512f', 'fd')]),
+          TD('fdg' + cmplx, f='sqrt'),
           TD(P, f='sqrt'),
           ),
 'cbrt':
@@ -764,14 +769,18 @@ defdict = {
     Ufunc(1, 1, None,
           docstrings.get('numpy.core.umath.ceil'),
           None,
-          TD(flts, f='ceil', astype={'e':'f'}),
+          TD('e', f='ceil', astype={'e':'f'}),
+          TD(inexactvec, simd=[('fma', 'fd'), ('avx512f', 'fd')]),
+          TD('fdg', f='ceil'),
           TD(O, f='npy_ObjectCeil'),
           ),
 'trunc':
     Ufunc(1, 1, None,
           docstrings.get('numpy.core.umath.trunc'),
           None,
-          TD(flts, f='trunc', astype={'e':'f'}),
+          TD('e', f='trunc', astype={'e':'f'}),
+          TD(inexactvec, simd=[('fma', 'fd'), ('avx512f', 'fd')]),
+          TD('fdg', f='trunc'),
           TD(O, f='npy_ObjectTrunc'),
           ),
 'fabs':
@@ -785,14 +794,18 @@ defdict = {
     Ufunc(1, 1, None,
           docstrings.get('numpy.core.umath.floor'),
           None,
-          TD(flts, f='floor', astype={'e':'f'}),
+          TD('e', f='floor', astype={'e':'f'}),
+          TD(inexactvec, simd=[('fma', 'fd'), ('avx512f', 'fd')]),
+          TD('fdg', f='floor'),
           TD(O, f='npy_ObjectFloor'),
           ),
 'rint':
     Ufunc(1, 1, None,
           docstrings.get('numpy.core.umath.rint'),
           None,
-          TD(inexact, f='rint', astype={'e':'f'}),
+          TD('e', f='rint', astype={'e':'f'}),
+          TD(inexactvec, simd=[('fma', 'fd'), ('avx512f', 'fd')]),
+          TD('fdg' + cmplx, f='rint'),
           TD(P, f='rint'),
           ),
 'arctan2':
@@ -828,8 +841,8 @@ defdict = {
 'isnan':
     Ufunc(1, 1, None,
           docstrings.get('numpy.core.umath.isnan'),
-          None,
-          TD(nodatetime_or_obj, out='?'),
+          'PyUFunc_IsFiniteTypeResolver',
+          TD(noobj, out='?'),
           ),
 'isnat':
     Ufunc(1, 1, None,
@@ -840,8 +853,8 @@ defdict = {
 'isinf':
     Ufunc(1, 1, None,
           docstrings.get('numpy.core.umath.isinf'),
-          None,
-          TD(nodatetime_or_obj, out='?'),
+          'PyUFunc_IsFiniteTypeResolver',
+          TD(noobj, out='?'),
           ),
 'isfinite':
     Ufunc(1, 1, None,
@@ -922,13 +935,10 @@ defdict = {
           docstrings.get('numpy.core.umath.matmul'),
           "PyUFunc_SimpleUniformOperationTypeResolver",
           TD(notimes_or_obj),
+          TD(O),
           signature='(n?,k),(k,m?)->(n?,m?)',
           ),
 }
-
-if sys.version_info[0] >= 3:
-    # Will be aliased to true_divide in umathmodule.c.src:InitOtherOperators
-    del defdict['divide']
 
 def indent(st, spaces):
     indentation = ' '*spaces
@@ -961,6 +971,9 @@ arity_lookup = {
         'O': 'OO_O',
         'P': 'OO_O_method',
     },
+    (3, 1): {
+        'O': 'OOO_O',
+    }
 }
 
 #for each name
@@ -1002,7 +1015,7 @@ def make_arrays(funcdict):
                     for vt in t.simd:
                         code2list.append(textwrap.dedent("""\
                         #ifdef HAVE_ATTRIBUTE_TARGET_{ISA}
-                        if (npy_cpu_supports("{isa}")) {{
+                        if (NPY_CPU_HAVE({ISA})) {{
                             {fname}_functions[{idx}] = {type}_{fname}_{isa};
                         }}
                         #endif
@@ -1061,15 +1074,9 @@ def make_ufuncs(funcdict):
         uf = funcdict[name]
         mlist = []
         docstring = textwrap.dedent(uf.docstring).strip()
-        if sys.version_info[0] < 3:
-            docstring = docstring.encode('string-escape')
-            docstring = docstring.replace(r'"', r'\"')
-        else:
-            docstring = docstring.encode('unicode-escape').decode('ascii')
-            docstring = docstring.replace(r'"', r'\"')
-            # XXX: I don't understand why the following replace is not
-            # necessary in the python 2 case.
-            docstring = docstring.replace(r"'", r"\'")
+        docstring = docstring.encode('unicode-escape').decode('ascii')
+        docstring = docstring.replace(r'"', r'\"')
+        docstring = docstring.replace(r"'", r"\'")
         # Split the docstring because some compilers (like MS) do not like big
         # string literal in C code. We split at endlines because textwrap.wrap
         # do not play well with \n
@@ -1132,11 +1139,11 @@ def make_code(funcdict, filename):
 
         Please make changes to the code generator program (%s)
     **/
-    #include "cpuid.h"
     #include "ufunc_object.h"
     #include "ufunc_type_resolution.h"
     #include "loops.h"
     #include "matmul.h"
+    #include "clip.h"
     %s
 
     static int
@@ -1154,7 +1161,6 @@ def make_code(funcdict, filename):
 
 if __name__ == "__main__":
     filename = __file__
-    fid = open('__umath_generated.c', 'w')
     code = make_code(defdict, filename)
-    fid.write(code)
-    fid.close()
+    with open('__umath_generated.c', 'w') as fid:
+        fid.write(code)

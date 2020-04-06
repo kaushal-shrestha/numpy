@@ -1,5 +1,3 @@
-from __future__ import absolute_import, division, print_function
-
 from .common import Benchmark
 
 import numpy as np
@@ -95,7 +93,18 @@ class Select(Benchmark):
         np.select(self.cond_large, ([self.d, self.e] * 10))
 
 
-class SortGenerator(object):
+def memoize(f):
+    _memoized = {}
+    def wrapped(*args):
+        if args not in _memoized:
+            _memoized[args] = f(*args)
+        
+        return _memoized[args].copy()
+
+    return f
+
+
+class SortGenerator:
     # The size of the unsorted area in the "random unsorted area"
     # benchmarks
     AREA_SIZE = 100
@@ -103,6 +112,7 @@ class SortGenerator(object):
     BUBBLE_SIZE = 100
 
     @staticmethod
+    @memoize
     def random(size, dtype):
         """
         Returns a randomly-shuffled array.
@@ -112,6 +122,7 @@ class SortGenerator(object):
         return arr
     
     @staticmethod
+    @memoize
     def ordered(size, dtype):
         """
         Returns an ordered array.
@@ -119,6 +130,7 @@ class SortGenerator(object):
         return np.arange(size, dtype=dtype)
 
     @staticmethod
+    @memoize
     def reversed(size, dtype):
         """
         Returns an array that's in descending order.
@@ -126,6 +138,7 @@ class SortGenerator(object):
         return np.arange(size-1, -1, -1, dtype=dtype)
 
     @staticmethod
+    @memoize
     def uniform(size, dtype):
         """
         Returns an array that has the same value everywhere.
@@ -133,6 +146,7 @@ class SortGenerator(object):
         return np.ones(size, dtype=dtype)
 
     @staticmethod
+    @memoize
     def swapped_pair(size, dtype, swap_frac):
         """
         Returns an ordered array, but one that has ``swap_frac * size``
@@ -145,6 +159,7 @@ class SortGenerator(object):
         return a
 
     @staticmethod
+    @memoize
     def sorted_block(size, dtype, block_size):
         """
         Returns an array with blocks that are all sorted.
@@ -159,6 +174,7 @@ class SortGenerator(object):
         return np.array(b)
 
     @classmethod
+    @memoize
     def random_unsorted_area(cls, size, dtype, frac, area_size=None):
         """
         This type of array has random unsorted areas such that they
@@ -176,6 +192,7 @@ class SortGenerator(object):
         return a
 
     @classmethod
+    @memoize
     def random_bubble(cls, size, dtype, bubble_num, bubble_size=None):
         """
         This type of array has ``bubble_num`` random unsorted areas.
@@ -197,7 +214,7 @@ class Sort(Benchmark):
         # In NumPy 1.17 and newer, 'merge' can be one of several
         # stable sorts, it isn't necessarily merge sort.
         ['quick', 'merge', 'heap'],
-        ['float64', 'int64', 'uint64'],
+        ['float64', 'int64', 'int16'],
         [
             ('random',),
             ('ordered',),
@@ -206,15 +223,15 @@ class Sort(Benchmark):
             ('sorted_block', 10),
             ('sorted_block', 100),
             ('sorted_block', 1000),
-            ('swapped_pair', 0.01),
-            ('swapped_pair', 0.1),
-            ('swapped_pair', 0.5),
-            ('random_unsorted_area', 0.5),
-            ('random_unsorted_area', 0.1),
-            ('random_unsorted_area', 0.01),
-            ('random_bubble', 1),
-            ('random_bubble', 5),
-            ('random_bubble', 10),
+            # ('swapped_pair', 0.01),
+            # ('swapped_pair', 0.1),
+            # ('swapped_pair', 0.5),
+            # ('random_unsorted_area', 0.5),
+            # ('random_unsorted_area', 0.1),
+            # ('random_unsorted_area', 0.01),
+            # ('random_bubble', 1),
+            # ('random_bubble', 5),
+            # ('random_bubble', 10),
         ],
     ]
     param_names = ['kind', 'dtype', 'array_type']
@@ -227,10 +244,10 @@ class Sort(Benchmark):
         array_class = array_type[0]
         self.arr = getattr(SortGenerator, array_class)(self.ARRAY_SIZE, dtype, *array_type[1:])
 
-    def time_sort_inplace(self, kind, dtype, array_type):
-        self.arr.sort(kind=kind)
-
     def time_sort(self, kind, dtype, array_type):
+        # Using np.sort(...) instead of arr.sort(...) because it makes a copy.
+        # This is important because the data is prepared once per benchmark, but
+        # used across multiple runs.
         np.sort(self.arr, kind=kind)
 
     def time_argsort(self, kind, dtype, array_type):
@@ -250,7 +267,7 @@ class SortWorst(Benchmark):
     def time_sort_worst(self):
         np.sort(self.worst)
 
-    # Retain old benchmark name for backward compatability
+    # Retain old benchmark name for backward compatibility
     time_sort_worst.benchmark_name = "bench_function_base.Sort.time_sort_worst"
 
 

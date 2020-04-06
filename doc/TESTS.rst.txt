@@ -119,7 +119,7 @@ that makes it hard to identify the test from the output of running the test
 suite with ``verbose=2`` (or similar verbosity setting).  Use plain comments
 (``#``) if necessary.
 
-Labeling tests 
+Labeling tests
 --------------
 
 As an alternative to ``pytest.mark.<label>``, there are a number of labels you
@@ -174,7 +174,7 @@ name; thus::
       print 'doing teardown'
 
 
-  class TestMe(object):
+  class TestMe:
       def setup():
           """Class-level setup"""
           print 'doing setup'
@@ -321,35 +321,33 @@ Known failures & skipping tests
 Sometimes you might want to skip a test or mark it as a known failure,
 such as when the test suite is being written before the code it's
 meant to test, or if a test only fails on a particular architecture.
-The decorators from numpy.testing.dec can be used to do this.
 
 To skip a test, simply use ``skipif``::
 
-  from numpy.testing import dec
+  import pytest
 
-  @dec.skipif(SkipMyTest, "Skipping this test because...")
+  @pytest.mark.skipif(SkipMyTest, reason="Skipping this test because...")
   def test_something(foo):
       ...
 
 The test is marked as skipped if ``SkipMyTest`` evaluates to nonzero,
 and the message in verbose test output is the second argument given to
 ``skipif``.  Similarly, a test can be marked as a known failure by
-using ``knownfailureif``::
+using ``xfail``::
 
-  from numpy.testing import dec
+  import pytest
 
-  @dec.knownfailureif(MyTestFails, "This test is known to fail because...")
+  @pytest.mark.xfail(MyTestFails, reason="This test is known to fail because...")
   def test_something_else(foo):
       ...
 
 Of course, a test can be unconditionally skipped or marked as a known
-failure by passing ``True`` as the first argument to ``skipif`` or
-``knownfailureif``, respectively.
+failure by using ``skip`` or ``xfail`` without argument, respectively.
 
 A total of the number of skipped and known failing tests is displayed
 at the end of the test run.  Skipped tests are marked as ``'S'`` in
 the test results (or ``'SKIPPED'`` for ``verbose > 1``), and known
-failing tests are marked as ``'K'`` (or ``'KNOWN'`` if ``verbose >
+failing tests are marked as ``'x'`` (or ``'XFAIL'`` if ``verbose >
 1``).
 
 Tests on random data
@@ -362,7 +360,17 @@ deterministic by setting the random number seed before generating it.  Use
 either Python's ``random.seed(some_number)`` or NumPy's
 ``numpy.random.seed(some_number)``, depending on the source of random numbers.
 
+Alternatively, you can use `Hypothesis`_ to generate arbitrary data.
+Hypothesis manages both Python's and Numpy's random seeds for you, and
+provides a very concise and powerful way to describe data (including
+``hypothesis.extra.numpy``, e.g. for a set of mutually-broadcastable shapes).
+
+The advantages over random generation include tools to replay and share
+failures without requiring a fixed seed, reporting *minimal* examples for
+each failure, and better-than-naive-random techniques for triggering bugs.
+
 
 .. _nose: https://nose.readthedocs.io/en/latest/
 .. _pytest: https://pytest.readthedocs.io
 .. _parameterization: https://docs.pytest.org/en/latest/parametrize.html
+.. _Hypothesis: https://hypothesis.readthedocs.io/en/latest/
